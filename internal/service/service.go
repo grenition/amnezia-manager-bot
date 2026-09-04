@@ -1,0 +1,201 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"regexp"
+
+	"amnezia-manager-bot/internal/config"
+	"amnezia-manager-bot/internal/netalloc"
+	"amnezia-manager-bot/internal/patcher"
+	"amnezia-manager-bot/internal/store"
+	"amnezia-manager-bot/internal/vpn"
+)
+
+var (
+	ErrNoAccess      = errors.New("no access")
+	ErrLimitReached  = errors.New("config limit reached")
+	ErrNotFound      = errors.New("not found")
+	ErrBadDeviceName = errors.New("invalid device name")
+	ErrBadLimit      = errors.New("invalid limit")
+)
+
+// IPListSource — источник списка AllowedIPs (реализация — routes.Service).
+type IPListSource interface {
+	AllowedIPs() []string
+}
+
+var deviceNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{1,30}[a-zA-Z0-9]$`)
+
+type CreatedConfig struct {
+	FileName   string
+	Content    string
+	DeviceName string
+}
+
+type Service struct {
+	cfg    config.Config
+	store  store.Store
+	vpn    vpn.Provider
+	ips    IPListSource
+	log    *slog.Logger
+	admins map[int64]struct{}
+}
+
+func New(cfg config.Config, st store.Store, vp vpn.Provider, ips IPListSource, log *slog.Logger) *Service {
+	admins := make(map[int64]struct{}, len(cfg.AdminIDs))
+	for _, id := range cfg.AdminIDs {
+		admins[id] = struct{}{}
+	}
+	return &Service{cfg: cfg, store: st, vpn: vp, ips: ips, log: log, admins: admins}
+}
+
+func (s *Service) IsAdmin(id int64) bool {
+	_, ok := s.admins[id]
+	return ok
+}
+
+func (s *Service) user(ctx context.Context, telegramID int64) (store.User, error) {
+	u, err := s.store.GetUser(ctx, telegramID)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return u, ErrNoAccess
+	case err != nil:
+		return u, err
+	case !u.Enabled:
+		return u, ErrNoAccess
+	}
+	return u, nil
+}
+
+func (s *Service) CheckAccess(ctx context.Context, telegramID int64) error {
+	_, err := s.user(ctx, telegramID)
+	return err
+}
+
+// CreateConfig: доступ и лимит → peer на сервере → патч AllowedIPs → метаданные в БД.
+// Полный конфиг и приватный ключ нигде не сохраняются.
+func (s *Service) CreateConfig(ctx context.Context, telegramID int64, deviceName string) (CreatedConfig, error) {
+	if !deviceNameRe.MatchString(deviceName) {
+		return CreatedConfig{}, ErrBadDeviceName
+	}
+	u, err := s.user(ctx, telegramID)
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	srv, err := s.cfg.DefaultServer()
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	ok, err := s.store.HasAccess(ctx, telegramID, srv.ID)
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	if !ok {
+		return CreatedConfig{}, ErrNoAccess
+	}
+	active, err := s.store.ListActivePeers(ctx, telegramID)
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	if len(active) >= u.ConfigLimit {
+		return CreatedConfig{}, ErrLimitReached
+	}
+	onServer, err := s.store.ListActivePeersOnServer(ctx, srv.ID)
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	_, cidr, err := net.ParseCIDR(srv.ClientCIDR)
+	if err != nil {
+		return CreatedConfig{}, fmt.Errorf("bad client_cidr: %w", err)
+	}
+	used := make([]net.IP, 0, len(onServer))
+	for _, p := range onServer {
+		used = append(used, net.ParseIP(p.ClientIP))
+	}
+	ip, err := netalloc.Allocate(cidr, used)
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	priv, pub, err := vpn.GenerateKeyPair()
+	if err != nil {
+		return CreatedConfig{}, err
+	}
+	if err := s.vpn.CreatePeer(ctx, srv.ID, pub, ip.String()); err != nil {
+		return CreatedConfig{}, fmt.Errorf("create peer on server: %w", err)
+	}
+	patched, err := patcher.Patch(vpn.BuildClientConfig(srv, priv, ip.String()), s.ips.AllowedIPs())
+	if err != nil {
+		s.bestEffortRemove(ctx, srv.ID, pub)
+		return CreatedConfig{}, err
+	}
+	p, err := s.store.CreatePeer(ctx, store.Peer{
+		TelegramID: telegramID, ServerID: srv.ID, PeerID: pub,
+		DeviceName: deviceName, ClientIP: ip.String(),
+	})
+	if err != nil {
+		s.bestEffortRemove(ctx, srv.ID, pub)
+		return CreatedConfig{}, fmt.Errorf("save peer: %w", err)
+	}
+	s.log.Info("config created", "user", telegramID, "peer_db_id", p.ID, "server", srv.ID, "device", deviceName)
+	return CreatedConfig{FileName: deviceName + ".conf", Content: patched, DeviceName: deviceName}, nil
+}
+
+func (s *Service) bestEffortRemove(ctx context.Context, serverID, pub string) {
+	if err := s.vpn.RemovePeer(ctx, serverID, pub); err != nil {
+		s.log.Error("cleanup failed, peer left on server", "server", serverID)
+	}
+}
+
+func (s *Service) ListDevices(ctx context.Context, telegramID int64) ([]store.Peer, int, error) {
+	u, err := s.user(ctx, telegramID)
+	if err != nil {
+		return nil, 0, err
+	}
+	peers, err := s.store.ListActivePeers(ctx, telegramID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return peers, u.ConfigLimit, nil
+}
+
+func (s *Service) DeleteConfig(ctx context.Context, telegramID int64, peerDBID int64) error {
+	p, err := s.store.GetActivePeer(ctx, telegramID, peerDBID)
+	if errors.Is(err, store.ErrNotFound) {
+		return ErrNotFound
+	}
+	if err != nil {
+		return err
+	}
+	if err := s.vpn.RemovePeer(ctx, p.ServerID, p.PeerID); err != nil {
+		return fmt.Errorf("remove peer from server: %w", err)
+	}
+	if err := s.store.RevokePeer(ctx, p.ID); err != nil {
+		return fmt.Errorf("revoke peer: %w", err)
+	}
+	s.log.Info("config deleted", "user", telegramID, "peer_db_id", p.ID, "server", p.ServerID)
+	return nil
+}
+
+// ServerForComplaint возвращает сервер для контекста обращения:
+// сервер первого конфига пользователя либо первый включённый.
+func (s *Service) ServerForComplaint(ctx context.Context, telegramID int64) (string, string, error) {
+	peers, err := s.store.ListActivePeers(ctx, telegramID)
+	if err != nil {
+		return "", "", err
+	}
+	id := ""
+	if len(peers) > 0 {
+		id = peers[0].ServerID
+	} else if ss := s.cfg.EnabledServers(); len(ss) > 0 {
+		id = ss[0].ID
+	}
+	srv, ok := s.cfg.ServerByID(id)
+	if !ok {
+		return "", "", errors.New("no server for complaint")
+	}
+	return srv.ID, srv.DisplayName, nil
+}
