@@ -57,11 +57,10 @@ BOT_TOKEN=... SSH_PRIVATE_KEY=/path/to/ssh/key \
 ## Развёртывание
 
 - **Docker**: `deploy/docker/Dockerfile` (multi-stage, непривилегированный пользователь).
-- **Kubernetes**: `deploy/k8s/` — ConfigMap (конфиг), Secret (токен, DSN, SSH-ключ),
-  Deployment (1 реплика, Recreate, probes `/healthz:8080`).
-- **VPN-сервер**: `deploy/server/README.md` — установка sudo-скриптов
-  `awg-peer-add` / `awg-peer-remove` / `awg-health`, sudoers, заметки про IPv6
-  и pinning SSH host key (обязательно до прода).
+- **Kubernetes и сетап VPN-сервера** — в репозитории `self-infra`:
+  `k8s/apps/amnezia-bot/` (манифесты, ConfigMap, secret-схема) и
+  `servers/amnezia-vpn/` (sudo-скрипты `awg-peer-add` / `awg-peer-remove` /
+  `awg-health`, sudoers, тесты скриптов).
 
 ## Архитектура
 

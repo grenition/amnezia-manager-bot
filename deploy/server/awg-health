@@ -1,7 +1,0 @@
-#!/bin/sh
-# awg-health IFACE — проверка, что интерфейс AmneziaWG жив.
-set -eu
-[ "$#" -eq 1 ] || { echo "usage: awg-health IFACE" >&2; exit 64; }
-iface="$1"
-awg show "$iface" >/dev/null
-echo ok

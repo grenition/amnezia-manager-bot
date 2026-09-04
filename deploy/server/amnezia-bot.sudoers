@@ -1,1 +1,0 @@
-amnezia-bot ALL=(root) NOPASSWD: /usr/local/bin/awg-peer-add, /usr/local/bin/awg-peer-remove, /usr/local/bin/awg-health
