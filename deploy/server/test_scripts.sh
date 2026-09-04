@@ -41,6 +41,16 @@ if ./awg-peer-add wg0 "$PUB2" 10.8.1.10/24; then echo "/24 suffix must fail" >&2
 ./awg-peer-remove wg0 "$PUB2"
 ! grep -q "PublicKey = $PUB2" "$AWG_CONF_DIR/wg0.conf"
 
+PUBPLUS="aB+C/dEfGhIjKlMnOpQrStUvWxYz0123456789AbCdEfG="
+./awg-peer-add wg0 "$PUBPLUS" 10.8.1.11
+grep -q "PublicKey = $PUBPLUS" "$AWG_CONF_DIR/wg0.conf"
+st=0
+./awg-peer-add wg0 "$PUBPLUS" 10.8.1.12 2>/dev/null || st=$?
+[ "$st" -eq 3 ] || { echo "dup add of +/ key must exit 3 (got $st)" >&2; exit 1; }
+./awg-peer-remove wg0 "$PUBPLUS"
+! grep -q "PublicKey = $PUBPLUS" "$AWG_CONF_DIR/wg0.conf"
+grep -q OLDPUB "$AWG_CONF_DIR/wg0.conf"
+
 ./awg-peer-remove wg0 "$PUB"
 ! grep -q "PublicKey = $PUB" "$AWG_CONF_DIR/wg0.conf"
 grep -q OLDPUB "$AWG_CONF_DIR/wg0.conf"
