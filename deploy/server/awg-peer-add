@@ -5,6 +5,7 @@ set -eu
 iface="$1"; pub="$2"; ip="$3"
 conf="${AWG_CONF_DIR:-/etc/amnezia/amnezia-wg}/$iface.conf"
 case "$pub" in *[!A-Za-z0-9+/=]*) echo "bad pubkey" >&2; exit 64;; esac
+case "$ip" in */32) ip="${ip%/32}";; esac
 echo "$ip" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || { echo "bad ip" >&2; exit 64; }
 [ -f "$conf" ] || { echo "no config $conf" >&2; exit 66; }
 if grep -Eq "^[[:space:]]*PublicKey[[:space:]]*=[[:space:]]*$pub[[:space:]]*$" "$conf"; then
