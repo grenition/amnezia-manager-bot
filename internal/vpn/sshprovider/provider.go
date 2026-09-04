@@ -137,7 +137,7 @@ func (r *realClient) Run(ctx context.Context, cmd string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer sess.Close()
+	defer func() { _ = sess.Close() }()
 	var out bytes.Buffer
 	sess.Stdout = &out
 	sess.Stderr = &out
