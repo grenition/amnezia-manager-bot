@@ -199,3 +199,69 @@ func (s *Service) ServerForComplaint(ctx context.Context, telegramID int64) (str
 	}
 	return srv.ID, srv.DisplayName, nil
 }
+
+// AdminAddUser регистрирует пользователя с лимитом по умолчанию
+// и доступом ко всем включённым серверам.
+func (s *Service) AdminAddUser(ctx context.Context, telegramID int64, username string) (store.User, error) {
+	u := store.User{TelegramID: telegramID, Username: username, Enabled: true, ConfigLimit: s.cfg.DefaultLimit}
+	if err := s.store.UpsertUser(ctx, u); err != nil {
+		return store.User{}, err
+	}
+	for _, srv := range s.cfg.EnabledServers() {
+		if err := s.store.GrantAccess(ctx, telegramID, srv.ID); err != nil {
+			return store.User{}, err
+		}
+	}
+	s.log.Info("user added", "user", telegramID)
+	return u, nil
+}
+
+func (s *Service) AdminDisableUser(ctx context.Context, telegramID int64) error {
+	if err := s.store.SetUserEnabled(ctx, telegramID, false); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	s.log.Info("user disabled", "user", telegramID)
+	return nil
+}
+
+func (s *Service) AdminSetLimit(ctx context.Context, telegramID int64, limit int) error {
+	if limit < 1 || limit > 50 {
+		return ErrBadLimit
+	}
+	if err := s.store.SetUserLimit(ctx, telegramID, limit); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return ErrNotFound
+		}
+		return err
+	}
+	s.log.Info("limit changed", "user", telegramID, "limit", limit)
+	return nil
+}
+
+type UserInfo struct {
+	store.User
+	ActiveConfigs int
+}
+
+func (s *Service) AdminListUsers(ctx context.Context) ([]UserInfo, error) {
+	users, err := s.store.ListUsers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	peers, err := s.store.ListActivePeersAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := map[int64]int{}
+	for _, p := range peers {
+		counts[p.TelegramID]++
+	}
+	out := make([]UserInfo, 0, len(users))
+	for _, u := range users {
+		out = append(out, UserInfo{User: u, ActiveConfigs: counts[u.TelegramID]})
+	}
+	return out, nil
+}
