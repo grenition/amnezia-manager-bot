@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -91,9 +92,9 @@ func TestRefreshKeepsLastKnownGood(t *testing.T) {
 }
 
 func TestRunRefreshesPeriodically(t *testing.T) {
-	calls := 0
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls++
+		calls.Add(1)
 		_, _ = w.Write([]byte("AllowedIPs = 5.0.0.0/8"))
 	}))
 	defer srv.Close()
@@ -105,7 +106,7 @@ func TestRunRefreshesPeriodically(t *testing.T) {
 	defer cancel()
 	go s.Run(ctx, 50*time.Millisecond)
 	<-ctx.Done()
-	if calls < 2 {
-		t.Fatalf("expected periodic refreshes, calls=%d", calls)
+	if calls.Load() < 2 {
+		t.Fatalf("expected periodic refreshes, calls=%d", calls.Load())
 	}
 }
