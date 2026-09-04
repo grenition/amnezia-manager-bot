@@ -26,6 +26,16 @@ servers:
     endpoint: 1.2.3.4:51820
     server_public_key: AAAA
     client_cidr: 10.8.1.0/24
+    awg:
+      jc: 4
+      jmin: 40
+      jmax: 70
+      s1: 68
+      s2: 149
+      h1: 11
+      h2: 22
+      h3: 33
+      h4: 44
 `
 
 func writeCfg(t *testing.T, content string) string {
@@ -55,6 +65,9 @@ func TestLoadOK(t *testing.T) {
 	}
 	if cfg.Servers[0].SSHPort != 22 || cfg.Servers[0].Interface != "wg0" {
 		t.Fatalf("defaults not applied: %+v", cfg.Servers[0])
+	}
+	if p := cfg.Servers[0].AWG; p == nil || p.Jc != 4 || p.Jmin != 40 || p.H4 != 44 {
+		t.Fatalf("awg params not parsed: %+v", cfg.Servers[0].AWG)
 	}
 	if cfg.Monitor.CheckInterval != 30*time.Second {
 		t.Fatalf("monitor parse failed: %+v", cfg.Monitor)

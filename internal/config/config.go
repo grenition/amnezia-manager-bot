@@ -10,7 +10,15 @@ import (
 )
 
 type AWGParams struct {
-	Jc, Jmin, Jmax, S1, S2, H1, H2, H3, H4 int `yaml:",inline"`
+	Jc   int `yaml:"jc"`
+	Jmin int `yaml:"jmin"`
+	Jmax int `yaml:"jmax"`
+	S1   int `yaml:"s1"`
+	S2   int `yaml:"s2"`
+	H1   int `yaml:"h1"`
+	H2   int `yaml:"h2"`
+	H3   int `yaml:"h3"`
+	H4   int `yaml:"h4"`
 }
 
 type ServerConfig struct {
