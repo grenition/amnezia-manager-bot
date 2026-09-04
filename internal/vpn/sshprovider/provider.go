@@ -65,6 +65,9 @@ func (p *Provider) run(ctx context.Context, serverID, cmd string) (string, error
 		p.mu.Lock()
 		delete(p.conns, serverID)
 		p.mu.Unlock()
+		if cerr := c.Close(); cerr != nil {
+			p.log.Warn("close evicted ssh connection", "server", serverID, "error", cerr)
+		}
 		return out, fmt.Errorf("ssh run %q: %w (output: %s)", cmd, err, out)
 	}
 	return out, nil
