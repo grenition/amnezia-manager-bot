@@ -30,22 +30,55 @@ func TestAdminAddUser(t *testing.T) {
 }
 
 func TestAdminDisableUser(t *testing.T) {
-	svc, _, _ := newSvc(t)
+	svc, st, fv := newSvc(t)
 	ctx := context.Background()
 	if _, err := svc.AdminAddUser(ctx, 555, "vasya"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := svc.CreateConfig(ctx, 555, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	peers, _, err := svc.ListDevices(ctx, 555)
+	if err != nil || len(peers) != 1 {
+		t.Fatalf("devices: %v %d %v", peers, len(peers), err)
+	}
+	p := peers[0]
+
 	if err := svc.AdminDisableUser(ctx, 555); err != nil {
 		t.Fatal(err)
+	}
+	if ps, _ := st.ListActivePeers(ctx, 555); len(ps) != 0 {
+		t.Fatalf("peers must be revoked on disable, got %d", len(ps))
+	}
+	if len(fv.removed) != 1 || fv.removed[0] != p.PeerID {
+		t.Fatalf("vpn removed %v, want [%s]", fv.removed, p.PeerID)
 	}
 	if err := svc.CheckAccess(ctx, 555); !errors.Is(err, ErrNoAccess) {
 		t.Fatalf("want ErrNoAccess, got %v", err)
 	}
-	if _, err := svc.CreateConfig(ctx, 555, "dev"); !errors.Is(err, ErrNoAccess) {
+	if _, err := svc.CreateConfig(ctx, 555, "dev2"); !errors.Is(err, ErrNoAccess) {
 		t.Fatalf("create must fail: %v", err)
 	}
 	if err := svc.AdminDisableUser(ctx, 999); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown user: %v", err)
+	}
+}
+
+func TestAdminDisableUserPeerRemoveFails(t *testing.T) {
+	svc, st, fv := newSvc(t)
+	ctx := context.Background()
+	if _, err := svc.CreateConfig(ctx, 100, "dev"); err != nil {
+		t.Fatal(err)
+	}
+	fv.errDel = errors.New("ssh down")
+	if err := svc.AdminDisableUser(ctx, 100); err != nil {
+		t.Fatalf("disable must succeed despite peer cleanup failure: %v", err)
+	}
+	if ps, _ := st.ListActivePeers(ctx, 100); len(ps) != 1 {
+		t.Fatal("peer must stay active when vpn remove fails")
+	}
+	if err := svc.CheckAccess(ctx, 100); !errors.Is(err, ErrNoAccess) {
+		t.Fatalf("want ErrNoAccess, got %v", err)
 	}
 }
 

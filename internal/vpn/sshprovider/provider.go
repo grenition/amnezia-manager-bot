@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -87,8 +88,16 @@ func (p *Provider) RemovePeer(ctx context.Context, serverID, publicKey string) e
 	if !ok {
 		return vpn.ErrServerNotFound
 	}
-	_, err := p.run(ctx, serverID, fmt.Sprintf("sudo awg-peer-remove %s %s", srv.Interface, publicKey))
-	return err
+	out, err := p.run(ctx, serverID, fmt.Sprintf("sudo awg-peer-remove %s %s", srv.Interface, publicKey))
+	if err != nil {
+		// awg-peer-remove печатает PEER_NOT_FOUND (exit 3), если peer уже
+		// отсутствует на сервере — удалять больше нечего, считаем успехом.
+		if strings.Contains(out, "PEER_NOT_FOUND") {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (p *Provider) HealthCheck(ctx context.Context, serverID string) error {

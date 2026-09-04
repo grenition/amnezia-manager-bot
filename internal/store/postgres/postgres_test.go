@@ -99,6 +99,9 @@ func TestPeers(t *testing.T) {
 	if _, err := s.CreatePeer(ctx, store.Peer{TelegramID: 1, ServerID: "s1", PeerID: "PUB2", DeviceName: "pc", ClientIP: "10.8.1.2"}); err == nil {
 		t.Fatal("duplicate client_ip must fail (unique constraint)")
 	}
+	if _, err := s.CreatePeer(ctx, store.Peer{TelegramID: 1, ServerID: "s1", PeerID: "PUB1", DeviceName: "tab", ClientIP: "10.8.1.3"}); err == nil {
+		t.Fatal("duplicate peer_id must fail (unique constraint)")
+	}
 	got, err := s.GetActivePeer(ctx, 1, p.ID)
 	if err != nil || got.ClientIP != "10.8.1.2" {
 		t.Fatalf("get: %v %+v", err, got)
@@ -118,6 +121,12 @@ func TestPeers(t *testing.T) {
 	onServer, err := s.ListActivePeersOnServer(ctx, "s1")
 	if err != nil || len(onServer) != 0 {
 		t.Fatalf("on server: %v %d", err, len(onServer))
+	}
+	if _, err := s.CreatePeer(ctx, store.Peer{TelegramID: 1, ServerID: "s1", PeerID: "PUB1", DeviceName: "phone2", ClientIP: "10.8.1.9"}); err != nil {
+		t.Fatalf("revoked peer_id must be reusable: %v", err)
+	}
+	if _, err := s.CreatePeer(ctx, store.Peer{TelegramID: 1, ServerID: "s1", PeerID: "PUB3", DeviceName: "tab", ClientIP: "10.8.1.2"}); err != nil {
+		t.Fatalf("revoked client_ip must be reusable: %v", err)
 	}
 }
 

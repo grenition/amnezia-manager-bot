@@ -21,12 +21,12 @@ CREATE TABLE vpn_peers (
     peer_id     TEXT NOT NULL,
     device_name TEXT NOT NULL,
     client_ip   INET NOT NULL,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-    revoked_at  TIMESTAMPTZ,
-    UNIQUE (server_id, peer_id),
-    UNIQUE (server_id, client_ip)
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    revoked_at   TIMESTAMPTZ
 );
 CREATE INDEX idx_vpn_peers_active ON vpn_peers (telegram_id) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX uq_vpn_peers_active_pub ON vpn_peers (server_id, peer_id) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX uq_vpn_peers_active_ip ON vpn_peers (server_id, client_ip) WHERE revoked_at IS NULL;
 
 CREATE TABLE server_status_messages (
     server_id  TEXT NOT NULL,

@@ -64,6 +64,22 @@ func TestRemovePeerCommand(t *testing.T) {
 	}
 }
 
+func TestRemovePeerNotFoundIsSuccess(t *testing.T) {
+	p, fc := newProvider(t)
+	fc.run = func(string) (string, error) { return "PEER_NOT_FOUND", errors.New("exit status 3") }
+	if err := p.RemovePeer(context.Background(), "s1", "PUBKEY=="); err != nil {
+		t.Fatalf("PEER_NOT_FOUND must be treated as already-removed success: %v", err)
+	}
+}
+
+func TestRemovePeerOtherErrorFails(t *testing.T) {
+	p, fc := newProvider(t)
+	fc.run = func(string) (string, error) { return "sudo: some other failure", errors.New("exit status 1") }
+	if err := p.RemovePeer(context.Background(), "s1", "PUBKEY=="); err == nil {
+		t.Fatal("generic errors must stay errors")
+	}
+}
+
 func TestHealthCheck(t *testing.T) {
 	p, _ := newProvider(t)
 	if err := p.HealthCheck(context.Background(), "s1"); err != nil {

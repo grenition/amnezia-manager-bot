@@ -223,8 +223,29 @@ func (s *Service) AdminDisableUser(ctx context.Context, telegramID int64) error 
 		}
 		return err
 	}
+	s.revokeUserPeers(ctx, telegramID)
 	s.log.Info("user disabled", "user", telegramID)
 	return nil
+}
+
+// revokeUserPeers отзывает все активные peer'ы пользователя на серверах
+// и в БД. Лучше-постараемся: пользователь уже отключён, ошибки очистки
+// только логируются (peer можно добить повторным disable или ручным delete).
+func (s *Service) revokeUserPeers(ctx context.Context, telegramID int64) {
+	peers, err := s.store.ListActivePeers(ctx, telegramID)
+	if err != nil {
+		s.log.Error("list peers on disable failed", "user", telegramID, "err", err)
+		return
+	}
+	for _, p := range peers {
+		if err := s.vpn.RemovePeer(ctx, p.ServerID, p.PeerID); err != nil {
+			s.log.Error("peer remove on disable failed", "user", telegramID, "peer_db_id", p.ID, "err", err)
+			continue
+		}
+		if err := s.store.RevokePeer(ctx, p.ID); err != nil {
+			s.log.Error("revoke on disable failed", "user", telegramID, "peer_db_id", p.ID, "err", err)
+		}
+	}
 }
 
 func (s *Service) AdminSetLimit(ctx context.Context, telegramID int64, limit int) error {
