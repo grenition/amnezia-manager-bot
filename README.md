@@ -1,21 +1,88 @@
 # amnezia-manager-bot
 
 Telegram-бот для самостоятельной выдачи конфигов AmneziaWG доверенным пользователям.
-Спека: docs/amnezia-manager-bot_spec.md
+Доступ — только по числовому Telegram User ID, состояние — в PostgreSQL, управлением
+peer'ами на VPN-сервере — по SSH через sudo-скрипты.
+
+Спека: [docs/amnezia-manager-bot_spec.md](docs/amnezia-manager-bot_spec.md)
+
+## Как это работает
+
+1. Пользователь открывает бота → `/start` → главное меню.
+2. «Создать конфиг» → вводит имя устройства → бот проверяет лимит, создаёт peer
+   на AmneziaWG-сервере, подставляет в конфиг split-routing (весь IPv4, кроме
+   российских и приватных сетей) и присылает `.conf` файл.
+3. Конфиг выдаётся один раз; приватные ключи и полные конфиги нигде не хранятся.
+   Потерянный конфиг нужно удалить и создать заново.
+4. «Мои устройства» → список активных конфигов и удаление любого из них.
+
+## Команды
+
+Пользователю доступно меню из `/start`:
+
+- **Создать конфиг** — выдача `.conf` (имя устройства: 3–32 символа, латиница/цифры/`-`/`_`)
+- **Мои устройства** — активные конфигы и лимит; удаление с подтверждением
+- **Инструкция** — как импортировать конфиг в AmneziaWG
+- **Пожаловаться** — обращение уходит администраторам
+
+Администратору (Telegram ID задаётся в `admin_ids` конфига):
+
+```
+/adduser <telegram_id> [username]   # добавить пользователя (лимит default_limit, доступ ко всем серверам)
+/disableuser <telegram_id>          # отключить и отозвать все его peer'ы
+/setlimit <telegram_id> <1..50>     # изменить лимит конфигов
+/users                              # список пользователей и активных конфигов
+```
 
 ## Разработка
-    make up              # поднять postgres (docker compose, остаётся запущен)
-    make down            # остановить postgres
-    make test            # unit-тесты (без внешних сервисов)
-    make test-integration  # + интеграционные тесты (нужен make up)
-    make lint            # golangci-lint
-    make build           # bin/amnezia-bot
 
-Локальный запуск (после make up):
-    BOT_TOKEN=... SSH_PRIVATE_KEY=/path/to/key \
-      DATABASE_URL="postgres://postgres:postgres@localhost:54329/amnezia_dev?sslmode=disable" \
-      ./bin/amnezia-bot -config configs/config.yaml
+```sh
+make up              # postgres в docker compose (amnezia_dev + amnezia_test), остаётся запущен
+make down            # остановить postgres
+make test            # unit-тесты (без внешних сервисов)
+make test-integration  # + интеграционные тести (нужен make up)
+make lint            # golangci-lint
+make build           # bin/amnezia-bot
+make docker          # образ amnezia-bot:dev
+```
 
-## Запуск
-    BOT_TOKEN=... DATABASE_URL=... SSH_PRIVATE_KEY=/path/to/key \
-      ./bin/amnezia-bot -config configs/config.yaml
+Локальный запуск (после `make up`; конфиг — на основе `configs/config.example.yaml`):
+
+```sh
+BOT_TOKEN=... SSH_PRIVATE_KEY=/path/to/ssh/key \
+  DATABASE_URL="postgres://postgres:postgres@localhost:54329/amnezia_dev?sslmode=disable" \
+  ./bin/amnezia-bot -config configs/config.yaml
+```
+
+## Развёртывание
+
+- **Docker**: `deploy/docker/Dockerfile` (multi-stage, непривилегированный пользователь).
+- **Kubernetes**: `deploy/k8s/` — ConfigMap (конфиг), Secret (токен, DSN, SSH-ключ),
+  Deployment (1 реплика, Recreate, probes `/healthz:8080`).
+- **VPN-сервер**: `deploy/server/README.md` — установка sudo-скриптов
+  `awg-peer-add` / `awg-peer-remove` / `awg-health`, sudoers, заметки про IPv6
+  и pinning SSH host key (обязательно до прода).
+
+## Архитектура
+
+```
+cmd/bot            — wiring, /healthz, graceful shutdown
+internal/tgbot     — команды, меню, диалоги, тексты ошибок
+internal/service   — доступ, лимиты, создание/удаление конфигов, админ-операции
+internal/vpn       — интерфейс провайдера, генерация ключей, шаблон конфига
+internal/vpn/sshprovider — SSH к серверу, sudo-скрипты
+internal/patcher   — замена AllowedIPs + валидация split-routing списка
+internal/routes    — last-known-good список AllowedIPs (встроенный + обновление по URL)
+internal/netalloc  — аллокация клиентских IP в подсети сервера
+internal/alerts    — статусные карточки серверов для админов (одно сообщение, редактируется)
+internal/monitor   — проверка доступности серверов с порогом алерта
+internal/store     — контракт хранилища; memory (тесты) и postgres (pgx + goose)
+```
+
+## Безопасность
+
+- Доступ и админство — только по числовым Telegram User ID (из БД и ConfigMap).
+- В БД и логах нет приватных ключей и полных конфигов; конфиг выдаётся один раз.
+- Секреты (токен, DSN, SSH-ключ) — только через env; ошибки пользователю без
+  внутренних деталей.
+- Управление сервером — отдельный SSH-пользователь с sudo только на три скрипта.
