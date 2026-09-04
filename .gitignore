@@ -1,1 +1,4 @@
+bin/
+.env
+*.local.yaml
 .superpowers/
