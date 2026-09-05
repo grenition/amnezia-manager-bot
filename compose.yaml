@@ -17,5 +17,18 @@ services:
       timeout: 2s
       retries: 15
 
+  # Локальный стенд AmneziaWG-сервера для ручного тестирования бота.
+  # Настоящие sudo-скрипты монтируются из репозитория self-infra.
+  fake-vpn:
+    build: deploy/docker/fake-vpn
+    container_name: amnezia-fake-vpn
+    ports:
+      - "127.0.0.1:2222:22"
+    volumes:
+      - ${SELF_INFRA_DIR:-../../DocsPlatform/self-infra}/servers/amnezia-vpn:/vpn-scripts:ro
+      - ./deploy/docker/fake-vpn/keys:/keys:ro
+      - fake_vpn_conf:/etc/amnezia
+
 volumes:
   pgdata:
+  fake_vpn_conf:

@@ -2,3 +2,4 @@ bin/
 .env
 *.local.yaml
 .superpowers/
+deploy/docker/fake-vpn/keys/

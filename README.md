@@ -54,6 +54,30 @@ BOT_TOKEN=... SSH_PRIVATE_KEY=/path/to/ssh/key \
   ./bin/amnezia-bot -config configs/config.yaml
 ```
 
+## Локальное тестирование
+
+В compose поднимается `fake-vpn` — стенд AmneziaWG-сервера: sshd + настоящие
+sudo-скрипты из self-infra (`servers/amnezia-vpn`) + заглушка `awg`, которая
+пишет вызовы в лог. Бот работает с ним по-настоящему: создание/удаление
+peer'ов, health-проверки, алерты. Не подключается только сам туннель.
+
+1. `make up` — postgres + fake-vpn (ssh на `127.0.0.1:2222`), dev-ключ создается `make dev-key`
+2. Получи токен у [@BotFather](https://t.me/BotFather), свой Telegram User ID — у [@userinfobot](https://t.me/userinfobot)
+3. Впиши свой ID в `admin_ids` в `configs/config.local.yaml`
+4. `BOT_TOKEN=... make run`
+5. В Telegram: `/adduser <свой_id> <username>` (админ тоже должен быть в users,
+   чтобы создавать конфиги) → «Создать конфиг» и т.д.
+
+Полезное:
+
+```sh
+make vpn-state   # wg0.conf (peers) и лог вызовов awg на фейковом сервере
+docker exec -it amnezia-postgres psql -U postgres -d amnezia_dev   # содержимое БД
+```
+
+Путь к self-infra задаётся через `SELF_INFRA_DIR` (по умолчанию
+`../../DocsPlatform/self-infra` относительно репозитория).
+
 ## Развёртывание
 
 - **Docker**: `deploy/docker/Dockerfile` (multi-stage, непривилегированный пользователь).
