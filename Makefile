@@ -21,14 +21,12 @@ dev-key:
 	@test -f $(DEV_KEY) || ssh-keygen -q -t ed25519 -N "" -C amnezia-bot-dev -f $(DEV_KEY)
 	@echo "$(DEV_KEY) готов"
 
-# Локальный запуск бота: BOT_TOKEN обязателен (получить у @BotFather).
 run: build dev-key
-	@test -n "$$BOT_TOKEN" || { echo "BOT_TOKEN is required (get it from @BotFather)" >&2; exit 1; }
-	BOT_TOKEN="$$BOT_TOKEN" SSH_PRIVATE_KEY="$(DEV_KEY)" \
-	  DATABASE_URL="postgres://postgres:postgres@localhost:54329/amnezia_dev?sslmode=disable" \
-	  ./$(BIN) -config configs/config.local.yaml
+	@test -f .env || { echo ".env not found: cp .env.example .env" >&2; exit 1; }
+	@set -a; . ./.env; set +a; \
+	test -n "$$BOT_TOKEN" || { echo "BOT_TOKEN is not set in .env" >&2; exit 1; }; \
+	./$(BIN) -config configs/config.local.yaml
 
-# Состояние фейкового VPN-сервера: конфиг peers + лог вызовов awg.
 vpn-state:
 	@echo "--- wg0.conf ---"
 	@docker exec amnezia-fake-vpn cat /etc/amnezia/amnezia-wg/wg0.conf 2>/dev/null || true

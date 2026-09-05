@@ -1,5 +1,4 @@
 #!/bin/sh
-# Локальный стенд "AmneziaWG-сервера": sshd + sudo-скрипты из self-infra + заглушка awg.
 set -eu
 
 if [ ! -f /vpn-scripts/awg-peer-add ]; then

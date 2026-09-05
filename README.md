@@ -62,9 +62,9 @@ sudo-скрипты из self-infra (`servers/amnezia-vpn`) + заглушка `
 peer'ов, health-проверки, алерты. Не подключается только сам туннель.
 
 1. `make up` — postgres + fake-vpn (ssh на `127.0.0.1:2222`), dev-ключ создается `make dev-key`
-2. Получи токен у [@BotFather](https://t.me/BotFather), свой Telegram User ID — у [@userinfobot](https://t.me/userinfobot)
-3. Впиши свой ID в `admin_ids` в `configs/config.local.yaml`
-4. `BOT_TOKEN=... make run`
+2. `cp .env.example .env`, вписать `BOT_TOKEN` (из [@BotFather](https://t.me/BotFather))
+3. Свой Telegram User ID ([@userinfobot](https://t.me/userinfobot)) — в `admin_ids` в `configs/config.local.yaml`
+4. `make run`
 5. В Telegram: `/adduser <свой_id> <username>` (админ тоже должен быть в users,
    чтобы создавать конфиги) → «Создать конфиг» и т.д.
 
