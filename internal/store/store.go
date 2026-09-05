@@ -33,6 +33,14 @@ type StatusMessage struct {
 	MessageID int64
 }
 
+// KnownUser — пользователь, который хоть раз писал боту; источник для
+// резолва @username → Telegram ID в админ-сценариях.
+type KnownUser struct {
+	TelegramID int64
+	Username   string
+	FirstName  string
+}
+
 type Store interface {
 	UpsertUser(ctx context.Context, u User) error
 	GetUser(ctx context.Context, telegramID int64) (User, error)
@@ -54,4 +62,7 @@ type Store interface {
 
 	GetStatusMessage(ctx context.Context, serverID string, adminID int64) (StatusMessage, error)
 	SaveStatusMessage(ctx context.Context, m StatusMessage) error
+
+	UpsertKnownUser(ctx context.Context, telegramID int64, username, firstName string) error
+	FindKnownUser(ctx context.Context, username string) (KnownUser, error)
 }

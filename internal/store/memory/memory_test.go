@@ -129,3 +129,35 @@ func TestStatusMessages(t *testing.T) {
 		t.Fatal("upsert failed")
 	}
 }
+
+func TestKnownUsers(t *testing.T) {
+	m := New()
+	ctx := context.Background()
+	if _, err := m.FindKnownUser(ctx, "ivan"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	if err := m.UpsertKnownUser(ctx, 1, "ivan", "Ivan"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.FindKnownUser(ctx, "ivan")
+	if err != nil || got.TelegramID != 1 || got.FirstName != "Ivan" {
+		t.Fatalf("find: %v %+v", err, got)
+	}
+	if err := m.UpsertKnownUser(ctx, 2, "ivan", "Ivan2"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = m.FindKnownUser(ctx, "ivan")
+	if err != nil || got.TelegramID != 2 {
+		t.Fatalf("username must move to user 2: %v %+v", err, got)
+	}
+	old, err := m.FindKnownUser(ctx, "1")
+	if err != nil || old.TelegramID != 1 {
+		t.Fatalf("old user keeps id-username: %v %+v", err, old)
+	}
+	if err := m.UpsertKnownUser(ctx, 1, "ivan_new", "Ivan"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = m.FindKnownUser(ctx, "ivan_new"); got.TelegramID != 1 {
+		t.Fatal("username update failed")
+	}
+}

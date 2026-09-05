@@ -95,8 +95,11 @@ func TestAdminSetLimit(t *testing.T) {
 	if err := svc.AdminSetLimit(ctx, 100, 0); !errors.Is(err, ErrBadLimit) {
 		t.Fatalf("zero limit: %v", err)
 	}
-	if err := svc.AdminSetLimit(ctx, 100, 51); !errors.Is(err, ErrBadLimit) {
+	if err := svc.AdminSetLimit(ctx, 100, 1001); !errors.Is(err, ErrBadLimit) {
 		t.Fatalf("huge limit: %v", err)
+	}
+	if err := svc.AdminSetLimit(ctx, 100, 1000); err != nil {
+		t.Fatalf("max limit must be allowed: %v", err)
 	}
 	if err := svc.AdminSetLimit(ctx, 999, 5); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("unknown user: %v", err)

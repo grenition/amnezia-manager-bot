@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -15,6 +16,7 @@ type MemoryStore struct {
 	access     map[int64]map[string]bool
 	peers      map[int64]store.Peer
 	statusMsgs map[string]map[int64]store.StatusMessage
+	knownUsers map[int64]store.KnownUser
 	nextPeerID int64
 }
 
@@ -24,6 +26,7 @@ func New() *MemoryStore {
 		access:     map[int64]map[string]bool{},
 		peers:      map[int64]store.Peer{},
 		statusMsgs: map[string]map[int64]store.StatusMessage{},
+		knownUsers: map[int64]store.KnownUser{},
 		nextPeerID: 1,
 	}
 }
@@ -183,4 +186,28 @@ func (m *MemoryStore) SaveStatusMessage(_ context.Context, sm store.StatusMessag
 	}
 	m.statusMsgs[sm.ServerID][sm.AdminID] = sm
 	return nil
+}
+
+func (m *MemoryStore) UpsertKnownUser(_ context.Context, telegramID int64, username, firstName string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, u := range m.knownUsers {
+		if u.Username == username && id != telegramID {
+			u.Username = strconv.FormatInt(id, 10)
+			m.knownUsers[id] = u
+		}
+	}
+	m.knownUsers[telegramID] = store.KnownUser{TelegramID: telegramID, Username: username, FirstName: firstName}
+	return nil
+}
+
+func (m *MemoryStore) FindKnownUser(_ context.Context, username string) (store.KnownUser, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, u := range m.knownUsers {
+		if u.Username == username {
+			return u, nil
+		}
+	}
+	return store.KnownUser{}, store.ErrNotFound
 }

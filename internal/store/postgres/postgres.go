@@ -203,3 +203,29 @@ func (s *Store) SaveStatusMessage(ctx context.Context, sm store.StatusMessage) e
 		sm.ServerID, sm.AdminID, sm.ChatID, sm.MessageID)
 	return err
 }
+
+func (s *Store) UpsertKnownUser(ctx context.Context, telegramID int64, username, firstName string) error {
+	if _, err := s.pool.Exec(ctx,
+		"UPDATE known_users SET username = telegram_id::text WHERE username = $1 AND telegram_id <> $2",
+		username, telegramID); err != nil {
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO known_users (telegram_id, username, first_name, last_seen)
+		VALUES ($2, $1, $3, now())
+		ON CONFLICT (telegram_id) DO UPDATE
+		SET username = EXCLUDED.username, first_name = EXCLUDED.first_name, last_seen = now()`,
+		username, telegramID, firstName)
+	return err
+}
+
+func (s *Store) FindKnownUser(ctx context.Context, username string) (store.KnownUser, error) {
+	var u store.KnownUser
+	err := s.pool.QueryRow(ctx,
+		"SELECT telegram_id, username, first_name FROM known_users WHERE username = $1", username).
+		Scan(&u.TelegramID, &u.Username, &u.FirstName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return u, store.ErrNotFound
+	}
+	return u, err
+}

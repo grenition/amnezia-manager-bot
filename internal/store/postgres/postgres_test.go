@@ -28,7 +28,7 @@ func testStore(t *testing.T) *Store {
 	if err := db.Migrate(pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE users, user_server_access, vpn_peers, server_status_messages RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE users, user_server_access, vpn_peers, server_status_messages, known_users RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	return New(pool)
@@ -154,5 +154,31 @@ func TestStatusMessages(t *testing.T) {
 	sm, err := s.GetStatusMessage(ctx, "s1", 10)
 	if err != nil || sm.MessageID != 200 {
 		t.Fatalf("get: %v %+v", err, sm)
+	}
+}
+
+func TestKnownUsers(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	if _, err := s.FindKnownUser(ctx, "ivan"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	if err := s.UpsertKnownUser(ctx, 1, "ivan", "Ivan"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.FindKnownUser(ctx, "ivan")
+	if err != nil || got.TelegramID != 1 || got.FirstName != "Ivan" {
+		t.Fatalf("find: %v %+v", err, got)
+	}
+	if err := s.UpsertKnownUser(ctx, 2, "ivan", "Ivan2"); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.FindKnownUser(ctx, "ivan")
+	if err != nil || got.TelegramID != 2 {
+		t.Fatalf("username must move to user 2: %v %+v", err, got)
+	}
+	old, err := s.FindKnownUser(ctx, "1")
+	if err != nil || old.TelegramID != 1 {
+		t.Fatalf("old user keeps id-username: %v %+v", err, old)
 	}
 }

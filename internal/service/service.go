@@ -200,6 +200,21 @@ func (s *Service) ServerForComplaint(ctx context.Context, telegramID int64) (str
 	return srv.ID, srv.DisplayName, nil
 }
 
+// RememberUser обновляет соответствие Telegram ID ↔ @username для всех,
+// кто пишет боту; источник данных для админ-сценариев.
+func (s *Service) RememberUser(ctx context.Context, telegramID int64, username, firstName string) {
+	if username == "" {
+		return
+	}
+	if err := s.store.UpsertKnownUser(ctx, telegramID, username, firstName); err != nil {
+		s.log.Warn("remember user failed", "user", telegramID, "err", err)
+	}
+}
+
+func (s *Service) FindKnownUser(ctx context.Context, username string) (store.KnownUser, error) {
+	return s.store.FindKnownUser(ctx, username)
+}
+
 // AdminAddUser регистрирует пользователя с лимитом по умолчанию
 // и доступом ко всем включённым серверам.
 func (s *Service) AdminAddUser(ctx context.Context, telegramID int64, username string) (store.User, error) {
@@ -249,7 +264,7 @@ func (s *Service) revokeUserPeers(ctx context.Context, telegramID int64) {
 }
 
 func (s *Service) AdminSetLimit(ctx context.Context, telegramID int64, limit int) error {
-	if limit < 1 || limit > 50 {
+	if limit < 1 || limit > 1000 {
 		return ErrBadLimit
 	}
 	if err := s.store.SetUserLimit(ctx, telegramID, limit); err != nil {
