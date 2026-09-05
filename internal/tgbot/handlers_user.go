@@ -115,7 +115,7 @@ func (b *Bot) doDelete(ctx context.Context, uid int64, chatID int64, msgID int64
 	b.editDevices(ctx, uid, chatID, msgID)
 }
 
-func (b *Bot) handleComplaintText(ctx context.Context, uid int64, username string, chatID int64, text string) {
+func (b *Bot) handleComplaintText(ctx context.Context, uid int64, username, firstName string, chatID int64, text string) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		b.sendHTML(chatID, textAskComplaint)
@@ -127,7 +127,7 @@ func (b *Bot) handleComplaintText(ctx context.Context, uid int64, username strin
 		b.sendHTML(chatID, textServiceDown)
 		return
 	}
-	b.alerts.Complaint(ctx, serverID, alerts.Complaint{AuthorID: uid, Username: username, Text: text})
+	b.alerts.Complaint(ctx, serverID, alerts.Complaint{AuthorID: uid, Username: username, FirstName: firstName, Text: text})
 	b.log.Info("complaint registered", "user", uid, "server", serverID)
 	b.sendHTML(chatID, textComplaintSent)
 }

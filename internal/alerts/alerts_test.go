@@ -26,7 +26,7 @@ func (f *fakeSender) SendMessage(chatID int64, text string) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.nextID++
-	f.sent = append(f.sent, text)
+	f.sent = append(f.sent, fmt.Sprintf("%d:%s", chatID, text))
 	return f.nextID, nil
 }
 
@@ -72,13 +72,13 @@ func TestRecoveryAndNewIncidentEditSameMessage(t *testing.T) {
 	m.ServerDown(ctx, "s1")
 	first, _ := st.GetStatusMessage(ctx, "s1", 10)
 	m.ServerUp(ctx, "s1")
-	m.ServerDown(ctx, "s1") // новый инцидент
+	m.ServerDown(ctx, "s1")
 	second, _ := st.GetStatusMessage(ctx, "s1", 10)
 	if first.MessageID != second.MessageID {
 		t.Fatalf("message id changed: %d -> %d", first.MessageID, second.MessageID)
 	}
-	if len(fs.sent) != 2 {
-		t.Fatalf("no new messages expected after first, sent=%d", len(fs.sent))
+	if n := len(fs.sent); n != 2 {
+		t.Fatalf("no new messages expected after first, sent=%d", n)
 	}
 	key := fmt.Sprintf("10:%d", second.MessageID)
 	if _, ok := fs.edited[key]; !ok {
@@ -86,25 +86,21 @@ func TestRecoveryAndNewIncidentEditSameMessage(t *testing.T) {
 	}
 }
 
-func TestComplaintUpdatesCard(t *testing.T) {
+func TestComplaintSendsDedicatedMessage(t *testing.T) {
 	m, fs, _ := newMgr(t)
 	ctx := context.Background()
-	m.Complaint(ctx, "s1", Complaint{AuthorID: 100, Username: "u100", Text: "не работает", At: time.Now()})
-	if len(fs.sent) != 2 {
-		t.Fatalf("complaint must create card if missing, sent=%d", len(fs.sent))
+	before := len(fs.sent)
+	m.Complaint(ctx, "s1", Complaint{AuthorID: 100, FirstName: "Арсений", Username: "resensisaw", Text: "не работает", At: time.Now()})
+	if got := len(fs.sent) - before; got != 2 {
+		t.Fatalf("complaint must be sent to every admin, sent=%d", got)
 	}
-	m.Complaint(ctx, "s1", Complaint{AuthorID: 101, Username: "u101", Text: "тоже не работает", At: time.Now()})
-	if len(fs.sent) != 2 {
-		t.Fatalf("second complaint must edit existing card, sent=%d", len(fs.sent))
-	}
-	found := false
-	for _, txt := range fs.edited {
-		if strings.Contains(txt, "u101") && strings.Contains(txt, "тоже не работает") {
-			found = true
+	for _, s := range fs.sent[before:] {
+		if !strings.Contains(s, "resensisaw") || !strings.Contains(s, "не работает") {
+			t.Fatalf("complaint text incomplete: %q", s)
 		}
 	}
-	if !found {
-		t.Fatalf("complaint text not in card edits: %v", fs.edited)
+	if len(fs.edited) != 0 {
+		t.Fatalf("complaint must not touch status cards: %v", fs.edited)
 	}
 }
 
@@ -135,7 +131,7 @@ func TestEditFailureSendsNewMessage(t *testing.T) {
 	fs.failEd = true
 	fs.mu.Unlock()
 	before := len(fs.sent)
-	m.ServerUp(ctx, "s1") // edit упадёт → отправит новое сообщение и перепишет id
+	m.ServerUp(ctx, "s1")
 	if len(fs.sent) <= before {
 		t.Fatal("expected new message on edit failure")
 	}

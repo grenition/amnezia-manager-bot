@@ -17,14 +17,15 @@ type Sender interface {
 }
 
 type Complaint struct {
-	AuthorID int64
-	Username string
-	Text     string
-	At       time.Time
+	AuthorID  int64
+	FirstName string
+	Username  string
+	Text      string
+	At        time.Time
 }
 
-// Manager ведёт по одному статусному сообщению на (сервер, админ) и редактирует его:
-// недоступен / восстановлен / новое обращение. Новое сообщение — только если его ещё нет.
+// Manager ведёт по одному статусному сообщению на (сервер, админ) для алертов
+// доступности; обращения пользователей уходят отдельными сообщениями.
 type Manager struct {
 	store       store.Store
 	sender      Sender
@@ -32,9 +33,8 @@ type Manager struct {
 	adminIDs    []int64
 	log         *slog.Logger
 
-	mu         sync.Mutex
-	downSince  map[string]time.Time
-	complaints map[string][]Complaint
+	mu        sync.Mutex
+	downSince map[string]time.Time
 }
 
 func NewManager(st store.Store, sender Sender, serverNames map[string]string, adminIDs []int64) *Manager {
@@ -45,7 +45,6 @@ func NewManager(st store.Store, sender Sender, serverNames map[string]string, ad
 		adminIDs:    adminIDs,
 		log:         slog.Default(),
 		downSince:   map[string]time.Time{},
-		complaints:  map[string][]Complaint{},
 	}
 }
 
@@ -72,42 +71,38 @@ func (m *Manager) ServerUp(ctx context.Context, serverID string) {
 	m.updateCards(ctx, serverID)
 }
 
+// Complaint отправляет обращение отдельным сообщением каждому админу —
+// его нельзя прятать в редактируемую статусную карточку.
 func (m *Manager) Complaint(ctx context.Context, serverID string, c Complaint) {
-	m.mu.Lock()
-	m.complaints[serverID] = append(m.complaints[serverID], c)
-	if len(m.complaints[serverID]) > 5 {
-		m.complaints[serverID] = m.complaints[serverID][len(m.complaints[serverID])-5:]
+	who := c.FirstName
+	if c.Username != "" {
+		if who != "" {
+			who += " "
+		}
+		who += "@" + c.Username
 	}
-	m.mu.Unlock()
-	m.updateCards(ctx, serverID)
+	if who == "" {
+		who = fmt.Sprintf("id %d", c.AuthorID)
+	}
+	text := fmt.Sprintf("%s [id %d]\n\n%s", who, c.AuthorID, c.Text)
+	if len(text) > 3500 {
+		text = text[:3500] + "…"
+	}
+	for _, admin := range m.adminIDs {
+		if _, err := m.sender.SendMessage(admin, "🆘 Обращение · "+m.name(serverID)+"\n\n"+text); err != nil {
+			m.log.Error("send complaint failed", "server", serverID, "admin", admin, "err", err)
+		}
+	}
 }
 
 func (m *Manager) card(serverID string) string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	name := m.name(serverID)
-	var text string
 	if since, ok := m.downSince[serverID]; ok {
-		text = fmt.Sprintf("🔴 Сервер «%s» недоступен с %s", name, since.Format("02.01 15:04"))
-	} else {
-		text = fmt.Sprintf("🟢 Сервер «%s» работает", name)
+		return fmt.Sprintf("🔴 Сервер «%s» недоступен с %s", name, since.Format("02.01 15:04"))
 	}
-	if cs := m.complaints[serverID]; len(cs) > 0 {
-		text += "\n\nОбращения:"
-		for i := len(cs) - 1; i >= 0 && i >= len(cs)-3; i-- {
-			c := cs[i]
-			who := c.Username
-			if who == "" {
-				who = fmt.Sprintf("id%d", c.AuthorID)
-			}
-			body := c.Text
-			if len(body) > 300 {
-				body = body[:300] + "…"
-			}
-			text += fmt.Sprintf("\n• %s %s [%d]: %s", c.At.Format("02.01 15:04"), who, c.AuthorID, body)
-		}
-	}
-	return text
+	return fmt.Sprintf("🟢 Сервер «%s» работает", name)
 }
 
 func (m *Manager) updateCards(ctx context.Context, serverID string) {

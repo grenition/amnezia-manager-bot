@@ -96,7 +96,7 @@ func (b *Bot) handleMessage(ctx context.Context, m *tgbotapi.Message) {
 		b.handleDeviceName(ctx, uid, chatID, m.Text)
 	case stateComplaint:
 		b.st.clear(uid)
-		b.handleComplaintText(ctx, uid, m.From.UserName, chatID, m.Text)
+		b.handleComplaintText(ctx, uid, m.From.UserName, m.From.FirstName, chatID, m.Text)
 	case stateAdminAddUser:
 		b.st.clear(uid)
 		b.adminResolveUser(ctx, uid, chatID, m.Text, "add")

@@ -19,13 +19,6 @@ func button(text string) tgbotapi.KeyboardButton {
 	return tgbotapi.KeyboardButton{Text: text}
 }
 
-func userRows() [][]tgbotapi.KeyboardButton {
-	return [][]tgbotapi.KeyboardButton{
-		{button(btnNewConfig), button(btnDevices)},
-		{button(btnHelp), button(btnSupport)},
-	}
-}
-
 func adminRows() [][]tgbotapi.KeyboardButton {
 	return [][]tgbotapi.KeyboardButton{
 		{button(btnUsers)},
@@ -39,8 +32,19 @@ func userKeyboard() tgbotapi.ReplyKeyboardMarkup {
 	return kb
 }
 
+func userRows() [][]tgbotapi.KeyboardButton {
+	return [][]tgbotapi.KeyboardButton{
+		{button(btnNewConfig), button(btnDevices)},
+		{button(btnHelp), button(btnSupport)},
+	}
+}
+
 func adminKeyboard() tgbotapi.ReplyKeyboardMarkup {
-	kb := tgbotapi.NewReplyKeyboard(append(adminRows(), userRows()...)...)
+	rows := append(adminRows(),
+		[]tgbotapi.KeyboardButton{button(btnNewConfig), button(btnDevices)},
+		[]tgbotapi.KeyboardButton{button(btnHelp)},
+	)
+	kb := tgbotapi.NewReplyKeyboard(rows...)
 	kb.ResizeKeyboard = true
 	return kb
 }
