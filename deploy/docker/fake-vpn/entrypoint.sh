@@ -24,4 +24,5 @@ fi
 chown -R amnezia-bot:amnezia-bot /home/amnezia-bot/.ssh
 
 ssh-keygen -A
+httpd -p 80 -h /www
 exec /usr/sbin/sshd -D -e

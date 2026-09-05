@@ -1,0 +1,40 @@
+#!/bin/sh
+CONF=/etc/amnezia/amnezia-wg/wg0.conf
+LOG=/var/log/awg.log
+
+echo "Content-Type: text/html; charset=utf-8"
+echo ""
+
+cat <<'HDR'
+<!DOCTYPE html>
+<html><head><meta http-equiv="refresh" content="5"><title>fake-vpn</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:24px;background:#111;color:#ddd}
+table{border-collapse:collapse;width:100%;margin-bottom:8px}
+td,th{border:1px solid #444;padding:6px 10px;text-align:left;font-size:14px}
+code{color:#8f8}
+h2{margin-top:32px}
+pre{background:#1b1b1b;padding:12px;border-radius:6px;overflow-x:auto;font-size:12px}
+.muted{color:#888;font-size:12px}
+</style></head><body>
+<h2>Peers &mdash; /etc/amnezia/amnezia-wg/wg0.conf</h2>
+<table><tr><th>#</th><th>Public key</th><th>Allowed IPs</th></tr>
+HDR
+
+awk '
+function esc(s) { gsub(/&/, "\\&amp;", s); gsub(/</, "\\&lt;", s); return s }
+/^# managed-by amnezia-bot/ { managed = 1; next }
+/^\[Peer\]/ { n++; printf "<tr><td>%d</td>", n; next }
+/^[[:space:]]*PublicKey/ { pk = esc($3); if (managed) pk = pk " &#129302;"; print "<td><code>" pk "</code></td>"; next }
+/^[[:space:]]*AllowedIPs/ { print "<td>" esc($3) "</td></tr>"; managed = 0; next }
+' "$CONF"
+
+cat <<'MID'
+</table>
+<p class="muted">&#129302; — peer, созданный ботом</p>
+<h2>awg log (последние 50 вызовов)</h2>
+<pre>
+MID
+
+tail -50 "$LOG"
+echo "</pre></body></html>"

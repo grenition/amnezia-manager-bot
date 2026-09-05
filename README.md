@@ -75,6 +75,9 @@ make vpn-state   # wg0.conf (peers) и лог вызовов awg на фейко
 docker exec -it amnezia-postgres psql -U postgres -d amnezia_dev   # содержимое БД
 ```
 
+Состояние fake-vpn видно в браузере: http://localhost:8081 — таблица peer'ов
+(созданные ботом помечены 🤖) и лог вызовов `awg`, автообновление 5 сек.
+
 Путь к self-infra задаётся через `SELF_INFRA_DIR` (по умолчанию
 `../../DocsPlatform/self-infra` относительно репозитория).
 

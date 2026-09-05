@@ -24,6 +24,7 @@ services:
     container_name: amnezia-fake-vpn
     ports:
       - "127.0.0.1:2222:22"
+      - "127.0.0.1:8081:80"
     volumes:
       - ./deploy/docker/fake-vpn/keys:/keys:ro
       - fake_vpn_conf:/etc/amnezia
