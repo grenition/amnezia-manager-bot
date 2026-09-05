@@ -1,0 +1,28 @@
+#!/bin/sh
+# awg-peer-remove IFACE PUBKEY — удаляет peer из конфига и из рантайма.
+set -eu
+[ "$#" -eq 2 ] || { echo "usage: awg-peer-remove IFACE PUBKEY" >&2; exit 64; }
+iface="$1"; pub="$2"
+conf="${AWG_CONF_DIR:-/etc/amnezia/amnezia-wg}/$iface.conf"
+case "$pub" in *[!A-Za-z0-9+/=]*) echo "bad pubkey" >&2; exit 64;; esac
+[ -f "$conf" ] || { echo "no config $conf" >&2; exit 66; }
+if ! grep -Fxq "PublicKey = $pub" "$conf"; then
+	echo "PEER_NOT_FOUND" >&2
+	exit 3
+fi
+tmp="$(mktemp)"
+awk -v pub="$pub" '
+	function flushPeer() {
+		if (inpeer && keep) printf "%s", peerbuf
+		inpeer = 0; keep = 1; peerbuf = ""
+	}
+	/^# managed-by amnezia-bot/ { flushPeer(); inpeer = 1; peerbuf = $0 "\n"; next }
+	/^\[Peer\]/ { if (!inpeer) { peerbuf = "" }; inpeer = 1; peerbuf = peerbuf $0 "\n"; next }
+	inpeer { peerbuf = peerbuf $0 "\n"; if ($0 == "PublicKey = " pub) keep = 0; next }
+	{ flushPeer(); print }
+	END { flushPeer() }
+' "$conf" > "$tmp"
+cat "$tmp" > "$conf"
+rm -f "$tmp"
+# peer мог уже отсутствовать в рантайме — это не ошибка
+awg set "$iface" peer "$pub" remove || true

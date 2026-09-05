@@ -81,10 +81,11 @@ docker exec -it amnezia-postgres psql -U postgres -d amnezia_dev   # содер�
 ## Развёртывание
 
 - **Docker**: `deploy/docker/Dockerfile` (multi-stage, непривилегированный пользователь).
-- **Kubernetes и сетап VPN-сервера** — в репозитории `self-infra`:
-  `k8s/apps/amnezia-bot/` (манифесты, ConfigMap, secret-схема) и
-  `servers/amnezia-vpn/` (sudo-скрипты `awg-peer-add` / `awg-peer-remove` /
-  `awg-health`, sudoers, тесты скриптов).
+- **VPN-сервер**: `deploy/server/` — sudo-скрипты `awg-peer-add` / `awg-peer-remove` /
+  `awg-health`, sudoers и инструкция сетапа (`deploy/server/README.md`, включая
+  блокировку IPv6 и pinning SSH host key до прода).
+- **Kubernetes** — в репозитории `self-infra`: `k8s/apps/amnezia-bot/`
+  (манифесты, ConfigMap, secret-схема).
 
 ## Архитектура
 

@@ -1,0 +1,19 @@
+#!/bin/sh
+# awg-peer-add IFACE PUBKEY IP — добавляет peer в конфиг AmneziaWG и применяет на лету.
+set -eu
+[ "$#" -eq 3 ] || { echo "usage: awg-peer-add IFACE PUBKEY IP" >&2; exit 64; }
+iface="$1"; pub="$2"; ip="$3"
+conf="${AWG_CONF_DIR:-/etc/amnezia/amnezia-wg}/$iface.conf"
+case "$pub" in *[!A-Za-z0-9+/=]*) echo "bad pubkey" >&2; exit 64;; esac
+case "$ip" in */32) ip="${ip%/32}";; esac
+echo "$ip" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' || { echo "bad ip" >&2; exit 64; }
+[ -f "$conf" ] || { echo "no config $conf" >&2; exit 66; }
+if grep -Fxq "PublicKey = $pub" "$conf"; then
+	echo "PEER_EXISTS" >&2
+	exit 3
+fi
+tmp="$(mktemp)"
+{ cat "$conf"; printf '\n# managed-by amnezia-bot\n[Peer]\nPublicKey = %s\nAllowedIPs = %s/32\n' "$pub" "$ip"; } > "$tmp"
+cat "$tmp" > "$conf"
+rm -f "$tmp"
+awg set "$iface" peer "$pub" allowed-ips "$ip/32"

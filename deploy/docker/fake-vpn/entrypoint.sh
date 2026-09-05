@@ -1,15 +1,6 @@
 #!/bin/sh
 set -eu
 
-if [ ! -f /vpn-scripts/awg-peer-add ]; then
-	echo "ERROR: /vpn-scripts is empty — mount servers/amnezia-vpn from self-infra" >&2
-	exit 1
-fi
-install -m 755 /vpn-scripts/awg-peer-add /usr/local/bin/
-install -m 755 /vpn-scripts/awg-peer-remove /usr/local/bin/
-install -m 755 /vpn-scripts/awg-health /usr/local/bin/
-install -m 440 -o root -g root /vpn-scripts/amnezia-bot.sudoers /etc/sudoers.d/amnezia-bot
-
 mkdir -p /var/log /etc/amnezia/amnezia-wg
 touch /var/log/awg.log
 chmod 666 /var/log/awg.log
