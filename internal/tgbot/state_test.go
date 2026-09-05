@@ -41,7 +41,7 @@ func TestStates(t *testing.T) {
 }
 
 func TestAllButtonsRouted(t *testing.T) {
-	for _, label := range []string{btnNewConfig, btnDevices, btnHelp, btnSupport, btnUsers, btnAddUser, btnDisable, btnLimit} {
+	for _, label := range []string{btnNewConfig, btnDevices, btnHelp, btnSupport, btnUsers, btnServers, btnAddUser, btnDisable, btnLimit} {
 		if !isButton(label) {
 			t.Fatalf("label %q missing from buttonLabels", label)
 		}

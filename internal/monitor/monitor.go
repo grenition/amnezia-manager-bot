@@ -18,7 +18,17 @@ type Alerts interface {
 
 type srvState struct {
 	downSince time.Time
+	upSince   time.Time
+	lastCheck time.Time
 	alerted   bool
+}
+
+// ServerStatus — снимок состояния одного сервера для отображения админу.
+type ServerStatus struct {
+	ServerID  string
+	Down      bool
+	Since     time.Time
+	LastCheck time.Time
 }
 
 // Monitor периодически проверяет серверы по SSH и уведомляет о недоступности
@@ -79,8 +89,10 @@ func (m *Monitor) checkServer(ctx context.Context, serverID string) {
 		st = &srvState{}
 		m.state[serverID] = st
 	}
+	st.lastCheck = m.now()
 	var down, up bool
 	if err != nil {
+		st.upSince = time.Time{}
 		if st.downSince.IsZero() {
 			st.downSince = m.now()
 		}
@@ -90,7 +102,11 @@ func (m *Monitor) checkServer(ctx context.Context, serverID string) {
 		}
 	} else {
 		was := st.alerted
-		*st = srvState{}
+		st.downSince = time.Time{}
+		st.alerted = false
+		if st.upSince.IsZero() {
+			st.upSince = m.now()
+		}
 		if was {
 			up = true
 		}
@@ -104,4 +120,28 @@ func (m *Monitor) checkServer(ctx context.Context, serverID string) {
 		m.alerts.ServerUp(ctx, serverID)
 		m.log.Info("server recovered", "server", serverID)
 	}
+}
+
+// Snapshot возвращает текущее состояние всех отслеживаемых серверов.
+func (m *Monitor) Snapshot() []ServerStatus {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]ServerStatus, 0, len(m.servers))
+	for _, s := range m.servers {
+		st := m.state[s.ID]
+		if st == nil {
+			out = append(out, ServerStatus{ServerID: s.ID})
+			continue
+		}
+		out = append(out, ServerStatus{
+			ServerID:  s.ID,
+			Down:      !st.downSince.IsZero(),
+			Since:     st.upSince,
+			LastCheck: st.lastCheck,
+		})
+		if !st.downSince.IsZero() {
+			out[len(out)-1].Since = st.downSince
+		}
+	}
+	return out
 }

@@ -6,6 +6,7 @@ import (
 	"html"
 	"strconv"
 	"strings"
+	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
@@ -199,6 +200,56 @@ func (b *Bot) cmdUsersList(ctx context.Context, chatID int64) {
 		sb.WriteString("\n⏳ <b>Ожидают Start</b>\n")
 		for _, inv := range invites {
 			fmt.Fprintf(&sb, "• @%s\n", html.EscapeString(inv.Username))
+		}
+	}
+	b.sendHTML(chatID, sb.String())
+}
+
+func humanDuration(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "меньше минуты"
+	case d < time.Hour:
+		return fmt.Sprintf("%dм", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dч %dм", int(d.Hours()), int(d.Minutes())%60)
+	default:
+		return fmt.Sprintf("%dд %dч", int(d.Hours())/24, int(d.Hours())%24)
+	}
+}
+
+func (b *Bot) cmdServersStatus(ctx context.Context, chatID int64) {
+	if b.status == nil {
+		b.sendHTML(chatID, textServiceDown)
+		return
+	}
+	now := time.Now()
+	var sb strings.Builder
+	sb.WriteString("📊 <b>Серверы</b>\n")
+	for _, st := range b.status.Snapshot() {
+		name, ok := b.serverNames[st.ServerID]
+		if !ok || name == "" {
+			name = st.ServerID
+		}
+		sb.WriteString("\n")
+		if st.Down {
+			fmt.Fprintf(&sb, "🔴 <b>%s</b> — недоступен", html.EscapeString(name))
+			if !st.Since.IsZero() {
+				fmt.Fprintf(&sb, " %s", humanDuration(now.Sub(st.Since)))
+			}
+			sb.WriteString("\n")
+		} else {
+			fmt.Fprintf(&sb, "🟢 <b>%s</b> — работает", html.EscapeString(name))
+			if !st.Since.IsZero() {
+				fmt.Fprintf(&sb, " %s", humanDuration(now.Sub(st.Since)))
+			}
+			sb.WriteString("\n")
+		}
+		if !st.LastCheck.IsZero() {
+			fmt.Fprintf(&sb, "Проверка: %s назад\n", humanDuration(now.Sub(st.LastCheck)))
+		}
+		if n, err := b.svc.PeersOnServer(ctx, st.ServerID); err == nil {
+			fmt.Fprintf(&sb, "Peer'ов: %d\n", n)
 		}
 	}
 	b.sendHTML(chatID, sb.String())

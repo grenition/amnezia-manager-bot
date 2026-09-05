@@ -10,6 +10,7 @@ const (
 	btnHelp      = "📖 Инструкция"
 	btnSupport   = "🆘 Помощь"
 	btnUsers     = "👑 Пользователи"
+	btnServers   = "📊 Серверы"
 	btnAddUser   = "➕ Добавить"
 	btnDisable   = "⛔️ Отключить"
 	btnLimit     = "🔢 Лимит"
@@ -21,7 +22,7 @@ func button(text string) tgbotapi.KeyboardButton {
 
 func adminRows() [][]tgbotapi.KeyboardButton {
 	return [][]tgbotapi.KeyboardButton{
-		{button(btnUsers)},
+		{button(btnUsers), button(btnServers)},
 		{button(btnAddUser), button(btnDisable), button(btnLimit)},
 	}
 }
@@ -55,6 +56,7 @@ var buttonLabels = map[string]struct{}{
 	btnHelp:      {},
 	btnSupport:   {},
 	btnUsers:     {},
+	btnServers:   {},
 	btnAddUser:   {},
 	btnDisable:   {},
 	btnLimit:     {},

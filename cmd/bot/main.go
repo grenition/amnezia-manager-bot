@@ -97,6 +97,6 @@ func run() error {
 		}
 	}()
 
-	b := tgbot.New(api, svc, alertsMgr, log, names)
+	b := tgbot.New(api, svc, alertsMgr, log, names, mon)
 	return b.Run(ctx)
 }

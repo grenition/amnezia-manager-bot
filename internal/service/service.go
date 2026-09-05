@@ -240,6 +240,15 @@ func (s *Service) ListInvites(ctx context.Context) ([]store.Invite, error) {
 	return s.store.ListInvites(ctx)
 }
 
+// PeersOnServer возвращает количество активных peer'ов на сервере.
+func (s *Service) PeersOnServer(ctx context.Context, serverID string) (int, error) {
+	peers, err := s.store.ListActivePeersOnServer(ctx, serverID)
+	if err != nil {
+		return 0, err
+	}
+	return len(peers), nil
+}
+
 // AdminAddUser регистрирует пользователя с лимитом по умолчанию
 // и доступом ко всем включённым серверам.
 func (s *Service) AdminAddUser(ctx context.Context, telegramID int64, username string) (store.User, error) {

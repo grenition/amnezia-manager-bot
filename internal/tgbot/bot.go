@@ -8,8 +8,14 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 
 	"amnezia-manager-bot/internal/alerts"
+	"amnezia-manager-bot/internal/monitor"
 	"amnezia-manager-bot/internal/service"
 )
+
+// StatusProvider отдаёт текущее состояние серверов (реализация — monitor.Monitor).
+type StatusProvider interface {
+	Snapshot() []monitor.ServerStatus
+}
 
 type Bot struct {
 	api         *tgbotapi.BotAPI
@@ -18,10 +24,11 @@ type Bot struct {
 	st          *states
 	log         *slog.Logger
 	serverNames map[string]string
+	status      StatusProvider
 }
 
-func New(api *tgbotapi.BotAPI, svc *service.Service, a *alerts.Manager, log *slog.Logger, serverNames map[string]string) *Bot {
-	return &Bot{api: api, svc: svc, alerts: a, st: newStates(), log: log, serverNames: serverNames}
+func New(api *tgbotapi.BotAPI, svc *service.Service, a *alerts.Manager, log *slog.Logger, serverNames map[string]string, status StatusProvider) *Bot {
+	return &Bot{api: api, svc: svc, alerts: a, st: newStates(), log: log, serverNames: serverNames, status: status}
 }
 
 // Sender адаптирует telegram-bot-api к alerts.Sender.
@@ -162,6 +169,10 @@ func (b *Bot) handleButton(ctx context.Context, uid int64, chatID int64, label s
 	case btnUsers:
 		if b.adminOnly(uid, chatID) {
 			b.cmdUsersList(ctx, chatID)
+		}
+	case btnServers:
+		if b.adminOnly(uid, chatID) {
+			b.cmdServersStatus(ctx, chatID)
 		}
 	case btnAddUser:
 		if b.adminOnly(uid, chatID) {

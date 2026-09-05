@@ -133,3 +133,44 @@ func TestServersIndependent(t *testing.T) {
 		t.Fatalf("calls = %v", calls)
 	}
 }
+
+func TestSnapshot(t *testing.T) {
+	m, fv, _ := newMon(t)
+	ctx := context.Background()
+	start := time.Now()
+	m.now = func() time.Time { return start }
+	fv.setErr("s2", errDown)
+	m.CheckNow(ctx)
+
+	snap := m.Snapshot()
+	if len(snap) != 2 {
+		t.Fatalf("snapshot size = %d", len(snap))
+	}
+	byID := map[string]struct {
+		Down  bool
+		Since time.Time
+		Last  time.Time
+	}{}
+	for _, s := range snap {
+		byID[s.ServerID] = struct {
+			Down  bool
+			Since time.Time
+			Last  time.Time
+		}{s.Down, s.Since, s.LastCheck}
+	}
+	if byID["s1"].Down || !byID["s1"].Since.Equal(start) || byID["s1"].Last.IsZero() {
+		t.Fatalf("s1 = %+v", byID["s1"])
+	}
+	if !byID["s2"].Down || !byID["s2"].Since.Equal(start) || byID["s2"].Last.IsZero() {
+		t.Fatalf("s2 = %+v", byID["s2"])
+	}
+
+	start = start.Add(3 * time.Minute)
+	fv.setErr("s2", nil)
+	m.CheckNow(ctx)
+	for _, s := range m.Snapshot() {
+		if s.ServerID == "s2" && (s.Down || !s.Since.Equal(start)) {
+			t.Fatalf("s2 after recovery = %+v", s)
+		}
+	}
+}
