@@ -57,18 +57,20 @@ func (m *Manager) name(serverID string) string {
 
 func (m *Manager) ServerDown(ctx context.Context, serverID string) {
 	m.mu.Lock()
+	isNewIncident := false
 	if _, ok := m.downSince[serverID]; !ok {
 		m.downSince[serverID] = time.Now()
+		isNewIncident = true
 	}
 	m.mu.Unlock()
-	m.updateCards(ctx, serverID)
+	m.updateCards(ctx, serverID, isNewIncident)
 }
 
 func (m *Manager) ServerUp(ctx context.Context, serverID string) {
 	m.mu.Lock()
 	delete(m.downSince, serverID)
 	m.mu.Unlock()
-	m.updateCards(ctx, serverID)
+	m.updateCards(ctx, serverID, false)
 }
 
 // Complaint отправляет обращение отдельным сообщением каждому админу —
@@ -105,15 +107,20 @@ func (m *Manager) card(serverID string) string {
 	return fmt.Sprintf("🟢 Сервер «%s» работает", name)
 }
 
-func (m *Manager) updateCards(ctx context.Context, serverID string) {
+// updateCards обновляет статусные карточки. Новый инцидент всегда получает
+// новое сообщение (старая карточка могла уйти глубоко в историю чата);
+// обновления внутри инцидента редактируют текущую карточку.
+func (m *Manager) updateCards(ctx context.Context, serverID string, forceNew bool) {
 	text := m.card(serverID)
 	for _, admin := range m.adminIDs {
-		sm, err := m.store.GetStatusMessage(ctx, serverID, admin)
-		if err == nil {
-			if m.sender.EditMessage(sm.ChatID, sm.MessageID, text) == nil {
-				continue
+		if !forceNew {
+			sm, err := m.store.GetStatusMessage(ctx, serverID, admin)
+			if err == nil {
+				if m.sender.EditMessage(sm.ChatID, sm.MessageID, text) == nil {
+					continue
+				}
+				m.log.Warn("edit status message failed, sending new", "server", serverID, "admin", admin)
 			}
-			m.log.Warn("edit status message failed, sending new", "server", serverID, "admin", admin)
 		}
 		msgID, err := m.sender.SendMessage(admin, text)
 		if err != nil {

@@ -66,7 +66,7 @@ func TestServerDownCreatesCardPerAdmin(t *testing.T) {
 	}
 }
 
-func TestRecoveryAndNewIncidentEditSameMessage(t *testing.T) {
+func TestNewIncidentSendsFreshMessage(t *testing.T) {
 	m, fs, st := newMgr(t)
 	ctx := context.Background()
 	m.ServerDown(ctx, "s1")
@@ -74,15 +74,31 @@ func TestRecoveryAndNewIncidentEditSameMessage(t *testing.T) {
 	m.ServerUp(ctx, "s1")
 	m.ServerDown(ctx, "s1")
 	second, _ := st.GetStatusMessage(ctx, "s1", 10)
+	if first.MessageID == second.MessageID {
+		t.Fatalf("new incident must send a new message, id stayed %d", first.MessageID)
+	}
+	if n := len(fs.sent); n != 4 {
+		t.Fatalf("sent = %d, want 4 (2 admins × 2 incidents)", n)
+	}
+}
+
+func TestRepeatDownWithinIncidentEditsCard(t *testing.T) {
+	m, fs, st := newMgr(t)
+	ctx := context.Background()
+	m.ServerDown(ctx, "s1")
+	first, _ := st.GetStatusMessage(ctx, "s1", 10)
+	before := len(fs.sent)
+	m.ServerDown(ctx, "s1")
+	after := len(fs.sent)
+	if before != after {
+		t.Fatalf("repeat down within incident must edit, sent grew: %d -> %d", before, after)
+	}
+	second, _ := st.GetStatusMessage(ctx, "s1", 10)
 	if first.MessageID != second.MessageID {
-		t.Fatalf("message id changed: %d -> %d", first.MessageID, second.MessageID)
+		t.Fatal("card id must not change within incident")
 	}
-	if n := len(fs.sent); n != 2 {
-		t.Fatalf("no new messages expected after first, sent=%d", n)
-	}
-	key := fmt.Sprintf("10:%d", second.MessageID)
-	if _, ok := fs.edited[key]; !ok {
-		t.Fatalf("no edit recorded: %v", fs.edited)
+	if len(fs.edited) == 0 {
+		t.Fatal("edit expected")
 	}
 }
 
