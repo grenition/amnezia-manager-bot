@@ -25,7 +25,7 @@ peer'ами на VPN-сервере — по SSH через sudo-скрипты.
 - **Инструкция** — как импортировать конфиг в AmneziaWG
 - **Пожаловаться** — обращение уходит администраторам
 
-Администратору (Telegram ID задаётся в `admin_ids` конфига):
+Администратору (Telegram ID задаётся в `admin_ids` конфига или через env `ADMIN_IDS`):
 
 ```
 /adduser <telegram_id> [username]   # добавить пользователя (лимит default_limit, доступ ко всем серверам)
@@ -46,7 +46,7 @@ make build           # bin/amnezia-bot
 make docker          # образ amnezia-bot:dev
 ```
 
-Локальный запуск (после `make up`; конфиг — на основе `configs/config.example.yaml`):
+Локальный запуск (после `make up`; конфиг — `configs/config.local.yaml`):
 
 ```sh
 BOT_TOKEN=... SSH_PRIVATE_KEY=/path/to/ssh/key \
@@ -63,9 +63,9 @@ peer'ов, health-проверки, алерты. Не подключается 
 
 1. `make up` — postgres + fake-vpn (ssh на `127.0.0.1:2222`), dev-ключ создается `make dev-key`
 2. `cp .env.example .env`, вписать `BOT_TOKEN` (из [@BotFather](https://t.me/BotFather))
-3. Свой Telegram User ID ([@userinfobot](https://t.me/userinfobot)) — в `admin_ids` в `configs/config.local.yaml`
-4. `make run`
-5. В Telegram: `/adduser <свой_id> <username>` (админ тоже должен быть в users,
+   и `ADMIN_IDS` — свой Telegram User ID ([@userinfobot](https://t.me/userinfobot))
+3. `make run`
+4. В Telegram: `/adduser <свой_id> <username>` (админ тоже должен быть в users,
    чтобы создавать конфиги) → «Создать конфиг» и т.д.
 
 Полезное:

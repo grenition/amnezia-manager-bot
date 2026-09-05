@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -70,6 +72,17 @@ func Load(path string) (Config, error) {
 	c.BotToken = os.Getenv("BOT_TOKEN")
 	c.DatabaseURL = os.Getenv("DATABASE_URL")
 	c.SSHPrivateKey = os.Getenv("SSH_PRIVATE_KEY")
+	if v := os.Getenv("ADMIN_IDS"); v != "" {
+		ids := make([]int64, 0, 4)
+		for _, part := range strings.Split(v, ",") {
+			id, err := strconv.ParseInt(strings.TrimSpace(part), 10, 64)
+			if err != nil {
+				return Config{}, fmt.Errorf("parse ADMIN_IDS %q: %w", part, err)
+			}
+			ids = append(ids, id)
+		}
+		c.AdminIDs = ids
+	}
 	c.setDefaults()
 	return c, c.Validate()
 }
@@ -105,7 +118,7 @@ func (c Config) Validate() error {
 		return fmt.Errorf("env SSH_PRIVATE_KEY is required")
 	}
 	if len(c.AdminIDs) == 0 {
-		return fmt.Errorf("admin_ids must not be empty")
+		return fmt.Errorf("admin_ids (or ADMIN_IDS env) must not be empty")
 	}
 	if c.DefaultLimit <= 0 {
 		return fmt.Errorf("default_limit must be positive")

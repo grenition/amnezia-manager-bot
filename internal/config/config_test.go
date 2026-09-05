@@ -112,6 +112,30 @@ func TestLoadEnvMissing(t *testing.T) {
 	}
 }
 
+func TestAdminIDsEnvOverride(t *testing.T) {
+	setEnvs(t)
+	t.Setenv("ADMIN_IDS", " 111, 222 ")
+	cfg, err := Load(writeCfg(t, validYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.AdminIDs) != 2 || cfg.AdminIDs[0] != 111 || cfg.AdminIDs[1] != 222 {
+		t.Fatalf("AdminIDs = %v, want [111 222]", cfg.AdminIDs)
+	}
+	t.Setenv("ADMIN_IDS", "not,a,number")
+	if _, err := Load(writeCfg(t, validYAML)); err == nil {
+		t.Fatal("expected ADMIN_IDS parse error")
+	}
+	t.Setenv("ADMIN_IDS", "")
+	cfg, err = Load(writeCfg(t, validYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.AdminIDs) != 2 || cfg.AdminIDs[0] != 10 {
+		t.Fatalf("AdminIDs = %v, want yaml values [10 20]", cfg.AdminIDs)
+	}
+}
+
 func TestClientCIDRParse(t *testing.T) {
 	setEnvs(t)
 	cfg, err := Load(writeCfg(t, validYAML))
