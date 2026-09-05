@@ -29,9 +29,10 @@ peer'ами на VPN-сервере — по SSH через sudo-скрипты.
 
 Администратору (Telegram ID задаётся в `admin_ids` конфига или через env `ADMIN_IDS`) —
 сверху появляются кнопки **👑 Пользователи / ➕ Добавить / ⛔️ Отключить / 🔢 Лимит**.
-Админские сценарии работают по @username: бот запоминает всех, кто нажимал Start
-(таблица `known_users`), и резолвит username → Telegram ID. Команды `/adduser`,
-`/disableuser`, `/setlimit`, `/users` остались рабочим fallback по числовым ID.
+Сценарии принимают @username или числовой Telegram ID. Если @username ещё не
+открывал бота — создаётся приглашение (`pending_invites`): человек нажимает Start,
+и доступ активируется автоматически. Команды `/adduser`, `/disableuser`,
+`/setlimit`, `/users` остались рабочим fallback.
 
 ## Разработка
 

@@ -14,11 +14,14 @@ import (
 )
 
 const (
-	textAdminAskUsername        = "➕ <b>Добавить пользователя</b>\n\nПришлите @username.\n\nЧеловек должен сначала открыть бота и нажать <b>Start</b> — иначе я его не найду."
-	textAdminAskUsernameDisable = "⛔️ <b>Отключить пользователя</b>\n\nПришлите @username. Все его конфиги будут отозваны."
-	textAdminAskUsernameLimit   = "🔢 <b>Изменить лимит</b>\n\nПришлите @username пользователя."
-	textAdminNotFound           = "😔 Не нашёл @%s.\n\nПопросите человека открыть бота, нажать Start и повторите."
+	textAdminAskUsername        = "➕ <b>Добавить пользователя</b>\n\nПришлите @username или числовой Telegram ID.\n\nЕсли человек ещё не открывал бота — создам приглашение: доступ появится автоматически после нажатия Start."
+	textAdminAskUsernameDisable = "⛔️ <b>Отключить пользователя</b>\n\nПришлите @username или числовой Telegram ID. Все конфиги будут отозваны."
+	textAdminAskUsernameLimit   = "🔢 <b>Изменить лимит</b>\n\nПришлите @username или числовой Telegram ID пользователя."
 )
+
+func inviteCreatedText(username string) string {
+	return "⏳ <b>Приглашение для @" + html.EscapeString(username) + " создано.</b>\n\nКак только человек откроет бота и нажмёт Start — доступ активируется автоматически."
+}
 
 func knownUserLine(u store.KnownUser) string {
 	name := strings.TrimSpace(u.FirstName)
@@ -29,17 +32,58 @@ func knownUserLine(u store.KnownUser) string {
 }
 
 func (b *Bot) adminResolveUser(ctx context.Context, uid int64, chatID int64, input, purpose string) {
-	username := strings.TrimPrefix(strings.TrimSpace(input), "@")
-	username = strings.TrimSuffix(username, "@")
-	if username == "" || strings.Contains(username, " ") {
-		b.sendHTML(chatID, "Пришлите @username одним сообщением.")
+	input = strings.TrimSpace(input)
+	if id, err := strconv.ParseInt(input, 10, 64); err == nil && id > 0 {
+		b.adminConfirmByID(uid, chatID, id, purpose)
+		return
+	}
+	username := strings.TrimPrefix(input, "@")
+	if username == "" || strings.ContainsAny(username, " @") {
+		b.sendHTML(chatID, "Пришлите @username или числовой Telegram ID одним сообщением.")
 		return
 	}
 	known, err := b.svc.FindKnownUser(ctx, username)
 	if err != nil {
-		b.sendHTML(chatID, fmt.Sprintf(textAdminNotFound, html.EscapeString(username)))
+		if purpose == "add" {
+			if err := b.svc.CreateInvite(ctx, username); err != nil {
+				b.log.Error("create invite failed", "err", err)
+				b.sendHTML(chatID, textServiceDown)
+				return
+			}
+			b.sendHTML(chatID, inviteCreatedText(username))
+			return
+		}
+		b.sendHTML(chatID, "😔 Не нашёл @<code>"+html.EscapeString(username)+"</code>.\n\nЧеловек должен сначала открыть бота и нажать Start.")
 		return
 	}
+	b.adminConfirmKnown(uid, chatID, known, purpose)
+}
+
+func (b *Bot) adminConfirmByID(uid int64, chatID int64, id int64, purpose string) {
+	switch purpose {
+	case "add":
+		kb := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("✅ Добавить", fmt.Sprintf("admadd:%d:", id)),
+				tgbotapi.NewInlineKeyboardButtonData("❌ Отмена", "admno"),
+			),
+		)
+		b.sendConfirm(chatID, fmt.Sprintf("➕ Добавить доступ для <code>%d</code>?", id), &kb)
+	case "disable":
+		kb := tgbotapi.NewInlineKeyboardMarkup(
+			tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonData("✅ Отключить", fmt.Sprintf("admdis:%d:", id)),
+				tgbotapi.NewInlineKeyboardButtonData("❌ Отмена", "admno"),
+			),
+		)
+		b.sendConfirm(chatID, fmt.Sprintf("⛔️ Отключить <code>%d</code>?\n\nВсе конфиги будут отозваны.", id), &kb)
+	case "limit":
+		b.st.setTarget(uid, stateAdminLimitValue, id, "")
+		b.sendConfirm(chatID, fmt.Sprintf("🔢 Введите новый лимит для <code>%d</code> (1–1000):", id), nil)
+	}
+}
+
+func (b *Bot) adminConfirmKnown(uid int64, chatID int64, known store.KnownUser, purpose string) {
 	switch purpose {
 	case "add":
 		kb := tgbotapi.NewInlineKeyboardMarkup(
@@ -85,6 +129,10 @@ func (b *Bot) adminAddConfirm(ctx context.Context, chatID, msgID int64, idStr, u
 		b.editHTML(chatID, msgID, userMessage(err), nil)
 		return
 	}
+	if username == "" {
+		b.editHTML(chatID, msgID, fmt.Sprintf("✅ Пользователь <code>%d</code> добавлен.", id), nil)
+		return
+	}
 	b.editHTML(chatID, msgID, "✅ @<code>"+html.EscapeString(username)+"</code> добавлен.", nil)
 }
 
@@ -97,6 +145,10 @@ func (b *Bot) adminDisableConfirm(ctx context.Context, chatID, msgID int64, idSt
 	if err := b.svc.AdminDisableUser(ctx, id); err != nil {
 		b.log.Error("admin disable failed", "err", err)
 		b.editHTML(chatID, msgID, userMessage(err), nil)
+		return
+	}
+	if username == "" {
+		b.editHTML(chatID, msgID, fmt.Sprintf("✅ Пользователь <code>%d</code> отключён, конфиги отозваны.", id), nil)
 		return
 	}
 	b.editHTML(chatID, msgID, "✅ @<code>"+html.EscapeString(username)+"</code> отключён, конфиги отозваны.", nil)
@@ -142,6 +194,12 @@ func (b *Bot) cmdUsersList(ctx context.Context, chatID int64) {
 			status = "⛔️"
 		}
 		fmt.Fprintf(&sb, "%s %s · %d конф.\n", status, who, u.ActiveConfigs)
+	}
+	if invites, err := b.svc.ListInvites(ctx); err == nil && len(invites) > 0 {
+		sb.WriteString("\n⏳ <b>Ожидают Start</b>\n")
+		for _, inv := range invites {
+			fmt.Fprintf(&sb, "• @%s\n", html.EscapeString(inv.Username))
+		}
 	}
 	b.sendHTML(chatID, sb.String())
 }

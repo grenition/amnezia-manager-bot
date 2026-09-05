@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"amnezia-manager-bot/internal/store"
 )
 
 func TestAdminAddUser(t *testing.T) {
@@ -121,5 +123,44 @@ func TestAdminListUsers(t *testing.T) {
 	}
 	if users[0].TelegramID != 100 || users[0].ActiveConfigs != 1 {
 		t.Fatalf("%+v", users[0])
+	}
+}
+
+func TestInviteRedemption(t *testing.T) {
+	svc, st, _ := newSvc(t)
+	ctx := context.Background()
+	if err := svc.CreateInvite(ctx, "@NewGuy"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.FindKnownUser(ctx, "newguy"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("known user must not exist yet: %v", err)
+	}
+	svc.RememberUser(ctx, 777, "NewGuy", "Новый")
+	if err := svc.CheckAccess(ctx, 777); err != nil {
+		t.Fatalf("invite must grant access on first contact: %v", err)
+	}
+	u, err := st.GetUser(ctx, 777)
+	if err != nil || u.Username != "newguy" || !u.Enabled {
+		t.Fatalf("redeemed user: %v %+v", err, u)
+	}
+	if invites, _ := svc.ListInvites(ctx); len(invites) != 0 {
+		t.Fatal("invite must be consumed")
+	}
+	svc.RememberUser(ctx, 778, "newguy", "Другой")
+	if err := svc.CheckAccess(ctx, 778); err == nil {
+		t.Fatal("invite must not redeem twice")
+	}
+}
+
+func TestCreateInviteValidation(t *testing.T) {
+	svc, _, _ := newSvc(t)
+	if err := svc.CreateInvite(context.Background(), "  "); err == nil {
+		t.Fatal("empty username must fail")
+	}
+	if err := svc.CreateInvite(context.Background(), "a b"); err == nil {
+		t.Fatal("username with space must fail")
+	}
+	if err := svc.CreateInvite(context.Background(), "@ok_user"); err != nil {
+		t.Fatalf("valid username must pass: %v", err)
 	}
 }

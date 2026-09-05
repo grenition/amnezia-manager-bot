@@ -229,3 +229,39 @@ func (s *Store) FindKnownUser(ctx context.Context, username string) (store.Known
 	}
 	return u, err
 }
+
+func (s *Store) CreateInvite(ctx context.Context, username string, configLimit int) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO pending_invites (username, config_limit)
+		VALUES ($1, $2)
+		ON CONFLICT (username) DO UPDATE SET config_limit = EXCLUDED.config_limit`,
+		username, configLimit)
+	return err
+}
+
+func (s *Store) TakeInvite(ctx context.Context, username string) (store.Invite, error) {
+	var inv store.Invite
+	err := s.pool.QueryRow(ctx, "DELETE FROM pending_invites WHERE username = $1 RETURNING username, config_limit", username).
+		Scan(&inv.Username, &inv.ConfigLimit)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return inv, store.ErrNotFound
+	}
+	return inv, err
+}
+
+func (s *Store) ListInvites(ctx context.Context) ([]store.Invite, error) {
+	rows, err := s.pool.Query(ctx, "SELECT username, config_limit FROM pending_invites ORDER BY username")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []store.Invite
+	for rows.Next() {
+		var inv store.Invite
+		if err := rows.Scan(&inv.Username, &inv.ConfigLimit); err != nil {
+			return nil, err
+		}
+		out = append(out, inv)
+	}
+	return out, rows.Err()
+}

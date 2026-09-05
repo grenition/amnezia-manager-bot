@@ -28,7 +28,7 @@ func testStore(t *testing.T) *Store {
 	if err := db.Migrate(pool); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
-	if _, err := pool.Exec(ctx, "TRUNCATE users, user_server_access, vpn_peers, server_status_messages, known_users RESTART IDENTITY CASCADE"); err != nil {
+	if _, err := pool.Exec(ctx, "TRUNCATE users, user_server_access, vpn_peers, server_status_messages, known_users, pending_invites RESTART IDENTITY CASCADE"); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	return New(pool)
@@ -180,5 +180,30 @@ func TestKnownUsers(t *testing.T) {
 	old, err := s.FindKnownUser(ctx, "1")
 	if err != nil || old.TelegramID != 1 {
 		t.Fatalf("old user keeps id-username: %v %+v", err, old)
+	}
+}
+
+func TestInvites(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	if _, err := s.TakeInvite(ctx, "vasya"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	if err := s.CreateInvite(ctx, "vasya", 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateInvite(ctx, "vasya", 50); err != nil {
+		t.Fatal(err)
+	}
+	invites, err := s.ListInvites(ctx)
+	if err != nil || len(invites) != 1 || invites[0].ConfigLimit != 50 {
+		t.Fatalf("list: %v %+v", err, invites)
+	}
+	inv, err := s.TakeInvite(ctx, "vasya")
+	if err != nil || inv.Username != "vasya" || inv.ConfigLimit != 50 {
+		t.Fatalf("take: %v %+v", err, inv)
+	}
+	if _, err := s.TakeInvite(ctx, "vasya"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatal("invite must be taken once")
 	}
 }

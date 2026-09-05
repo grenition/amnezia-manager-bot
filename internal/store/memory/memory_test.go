@@ -161,3 +161,31 @@ func TestKnownUsers(t *testing.T) {
 		t.Fatal("username update failed")
 	}
 }
+
+func TestInvites(t *testing.T) {
+	m := New()
+	ctx := context.Background()
+	if _, err := m.TakeInvite(ctx, "vasya"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got %v", err)
+	}
+	if err := m.CreateInvite(ctx, "vasya", 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.CreateInvite(ctx, "vasya", 50); err != nil {
+		t.Fatal(err)
+	}
+	invites, err := m.ListInvites(ctx)
+	if err != nil || len(invites) != 1 || invites[0].ConfigLimit != 50 {
+		t.Fatalf("list: %v %+v", err, invites)
+	}
+	inv, err := m.TakeInvite(ctx, "vasya")
+	if err != nil || inv.Username != "vasya" || inv.ConfigLimit != 50 {
+		t.Fatalf("take: %v %+v", err, inv)
+	}
+	if _, err := m.TakeInvite(ctx, "vasya"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatal("invite must be taken once")
+	}
+	if invites, _ = m.ListInvites(ctx); len(invites) != 0 {
+		t.Fatal("invite list must be empty after take")
+	}
+}

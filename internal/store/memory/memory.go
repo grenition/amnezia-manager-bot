@@ -17,6 +17,7 @@ type MemoryStore struct {
 	peers      map[int64]store.Peer
 	statusMsgs map[string]map[int64]store.StatusMessage
 	knownUsers map[int64]store.KnownUser
+	invites    map[string]store.Invite
 	nextPeerID int64
 }
 
@@ -27,6 +28,7 @@ func New() *MemoryStore {
 		peers:      map[int64]store.Peer{},
 		statusMsgs: map[string]map[int64]store.StatusMessage{},
 		knownUsers: map[int64]store.KnownUser{},
+		invites:    map[string]store.Invite{},
 		nextPeerID: 1,
 	}
 }
@@ -210,4 +212,33 @@ func (m *MemoryStore) FindKnownUser(_ context.Context, username string) (store.K
 		}
 	}
 	return store.KnownUser{}, store.ErrNotFound
+}
+
+func (m *MemoryStore) CreateInvite(_ context.Context, username string, configLimit int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.invites[username] = store.Invite{Username: username, ConfigLimit: configLimit}
+	return nil
+}
+
+func (m *MemoryStore) TakeInvite(_ context.Context, username string) (store.Invite, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	inv, ok := m.invites[username]
+	if !ok {
+		return store.Invite{}, store.ErrNotFound
+	}
+	delete(m.invites, username)
+	return inv, nil
+}
+
+func (m *MemoryStore) ListInvites(_ context.Context) ([]store.Invite, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]store.Invite, 0, len(m.invites))
+	for _, inv := range m.invites {
+		out = append(out, inv)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Username < out[j].Username })
+	return out, nil
 }

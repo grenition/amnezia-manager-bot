@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"regexp"
+	"strings"
 
 	"amnezia-manager-bot/internal/config"
 	"amnezia-manager-bot/internal/netalloc"
@@ -21,6 +22,7 @@ var (
 	ErrNotFound      = errors.New("not found")
 	ErrBadDeviceName = errors.New("invalid device name")
 	ErrBadLimit      = errors.New("invalid limit")
+	ErrBadUsername   = errors.New("invalid username")
 )
 
 // IPListSource — источник списка AllowedIPs (реализация — routes.Service).
@@ -201,18 +203,41 @@ func (s *Service) ServerForComplaint(ctx context.Context, telegramID int64) (str
 }
 
 // RememberUser обновляет соответствие Telegram ID ↔ @username для всех,
-// кто пишет боту; источник данных для админ-сценариев.
+// кто пишет боту, и активирует заранее выданные приглашения.
 func (s *Service) RememberUser(ctx context.Context, telegramID int64, username, firstName string) {
 	if username == "" {
 		return
 	}
+	username = strings.ToLower(username)
 	if err := s.store.UpsertKnownUser(ctx, telegramID, username, firstName); err != nil {
 		s.log.Warn("remember user failed", "user", telegramID, "err", err)
+		return
+	}
+	if _, err := s.store.TakeInvite(ctx, username); err == nil {
+		if _, err := s.AdminAddUser(ctx, telegramID, username); err != nil {
+			s.log.Error("invite redeem failed", "user", telegramID, "err", err)
+		} else {
+			s.log.Info("invite redeemed", "user", telegramID, "username", username)
+		}
 	}
 }
 
 func (s *Service) FindKnownUser(ctx context.Context, username string) (store.KnownUser, error) {
+	username = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(username, "@")))
 	return s.store.FindKnownUser(ctx, username)
+}
+
+// CreateInvite выдаёт приглашение по @username для человека, ещё не писавшего боту.
+func (s *Service) CreateInvite(ctx context.Context, username string) error {
+	username = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(username, "@")))
+	if username == "" || strings.ContainsAny(username, " @") {
+		return ErrBadUsername
+	}
+	return s.store.CreateInvite(ctx, username, s.cfg.DefaultLimit)
+}
+
+func (s *Service) ListInvites(ctx context.Context) ([]store.Invite, error) {
+	return s.store.ListInvites(ctx)
 }
 
 // AdminAddUser регистрирует пользователя с лимитом по умолчанию

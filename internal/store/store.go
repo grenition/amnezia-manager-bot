@@ -41,6 +41,13 @@ type KnownUser struct {
 	FirstName  string
 }
 
+// Invite — заранее выданное приглашение по @username; активируется,
+// когда человек впервые пишет боту.
+type Invite struct {
+	Username    string
+	ConfigLimit int
+}
+
 type Store interface {
 	UpsertUser(ctx context.Context, u User) error
 	GetUser(ctx context.Context, telegramID int64) (User, error)
@@ -65,4 +72,8 @@ type Store interface {
 
 	UpsertKnownUser(ctx context.Context, telegramID int64, username, firstName string) error
 	FindKnownUser(ctx context.Context, username string) (KnownUser, error)
+
+	CreateInvite(ctx context.Context, username string, configLimit int) error
+	TakeInvite(ctx context.Context, username string) (Invite, error)
+	ListInvites(ctx context.Context) ([]Invite, error)
 }
